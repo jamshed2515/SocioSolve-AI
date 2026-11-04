@@ -1,122 +1,98 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
+import { AuthProvider } from "./context/AuthContext";
 
-function App() {
-  const [count, setCount] = useState(0)
+// Auth pages
+import Login          from "./pages/auth/Login";
+import Register       from "./pages/auth/Register";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword  from "./pages/auth/ResetPassword";
 
+// Dashboards
+import CitizenDashboard    from "./pages/dashboards/CitizenDashboard";
+import StudentDashboard    from "./pages/dashboards/StudentDashboard";
+import UniversityDashboard from "./pages/dashboards/UniversityDashboard";
+import IndustryDashboard   from "./pages/dashboards/IndustryDashboard";
+import AdminDashboard      from "./pages/dashboards/AdminDashboard";
+
+// Profile
+import MyProfile   from "./pages/profile/MyProfile";
+import EditProfile from "./pages/profile/EditProfile";
+
+// Route guards
+import ProtectedRoute from "./routes/ProtectedRoute";
+import RoleRoute      from "./routes/RoleRoute";
+
+// 403 page
+import Unauthorized from "./pages/Unauthorized";
+
+export default function App() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <BrowserRouter>
+      <AuthProvider>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: "#1a1a35",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: "12px",
+              fontSize: "14px",
+            },
+            success: { iconTheme: { primary: "#00D4AA", secondary: "#1a1a35" } },
+            error:   { iconTheme: { primary: "#f87171", secondary: "#1a1a35" } },
+          }}
+        />
 
-      <div className="ticks"></div>
+        <Routes>
+          {/* ── Public routes ──────────────────────────────── */}
+          <Route path="/"                 element={<Navigate to="/login" replace />} />
+          <Route path="/login"            element={<Login />} />
+          <Route path="/register"         element={<Register />} />
+          <Route path="/forgot-password"  element={<ForgotPassword />} />
+          <Route path="/reset-password"   element={<ResetPassword />} />
+          <Route path="/unauthorized"     element={<Unauthorized />} />
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          {/* ── Protected: Profile (any role) ─────────────── */}
+          <Route path="/profile" element={
+            <ProtectedRoute><MyProfile /></ProtectedRoute>
+          } />
+          <Route path="/profile/edit" element={
+            <ProtectedRoute><EditProfile /></ProtectedRoute>
+          } />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          {/* ── Role-specific Dashboards ───────────────────── */}
+          <Route path="/dashboard/citizen" element={
+            <ProtectedRoute>
+              <RoleRoute role="citizen"><CitizenDashboard /></RoleRoute>
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/student" element={
+            <ProtectedRoute>
+              <RoleRoute role="student"><StudentDashboard /></RoleRoute>
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/university" element={
+            <ProtectedRoute>
+              <RoleRoute role="university"><UniversityDashboard /></RoleRoute>
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/industry" element={
+            <ProtectedRoute>
+              <RoleRoute role="industry"><IndustryDashboard /></RoleRoute>
+            </ProtectedRoute>
+          } />
+          <Route path="/dashboard/admin" element={
+            <ProtectedRoute>
+              <RoleRoute role="admin"><AdminDashboard /></RoleRoute>
+            </ProtectedRoute>
+          } />
+
+          {/* ── 404 fallback ───────────────────────────────── */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }
-
-export default App
