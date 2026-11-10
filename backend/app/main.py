@@ -14,6 +14,7 @@ from app.config.settings import settings
 from app.config.database import connect_to_mongo, close_mongo_connection
 from app.routes.auth_routes import router as auth_router
 from app.routes.user_routes import router as user_router
+from app.routes.partnership_routes import router as partnership_router
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -66,6 +67,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 # ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/api/users", tags=["Users"])
+app.include_router(partnership_router, prefix="/api/partnerships", tags=["Industry Partnerships"])
 
 
 # ── Root health check ───────────────────────────────────────────────────────

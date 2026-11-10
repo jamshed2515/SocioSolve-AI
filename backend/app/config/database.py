@@ -45,6 +45,24 @@ async def create_indexes():
     await db.refresh_tokens.create_index(
         "expires_at", expireAfterSeconds=0
     )  # TTL index – auto-delete expired tokens
+
+    # ── Module 6: Industry Partnerships ───────────────────────────────────
+    await db.partnerships.create_index([("status", 1), ("type", 1)])
+    await db.partnerships.create_index("industryUserId")
+    await db.partnerships.create_index([("createdAt", -1)])
+
+    # Application indexes
+    # NOTE FOR MODULE 3 INTEGRATION:
+    # Unique compound index on (partnershipId, applicantUserId) is currently enforced at the student level
+    # as a temporary solution while Module 3 (Team Formation) is pending development.
+    # When Module 3 is integrated, upgrade this index to (partnershipId, teamId).
+    await db.partnership_applications.create_index(
+        [("partnershipId", 1), ("applicantUserId", 1)],
+        unique=True
+    )
+    await db.partnership_applications.create_index("partnershipId")
+    await db.partnership_applications.create_index("applicantUserId")
+    await db.partnership_applications.create_index("status")
     logger.info("✅ Database indexes created.")
 
 
