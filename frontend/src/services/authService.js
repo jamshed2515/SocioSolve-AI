@@ -8,10 +8,14 @@ const authService = {
     if (res.data.accessToken) {
       localStorage.setItem("accessToken", res.data.accessToken);
     }
+    if (res.data.refreshToken) {
+      localStorage.setItem("refreshToken", res.data.refreshToken);
+    }
     return res;
   },
 
-  logout: async (refreshToken) => {
+  logout: async () => {
+    const refreshToken = localStorage.getItem("refreshToken");
     await api.post("/auth/logout", { refreshToken });
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
