@@ -50,6 +50,10 @@ const ROUTE_TITLES: Record<string, { title: string; subtitle: string }> = {
     title: "My Teams",
     subtitle: "Manage teams you lead or collaborate in across Jharkhand challenges",
   },
+  "/teams/create": {
+    title: "Create Team",
+    subtitle: "Form a new societal innovation team for a Jharkhand challenge",
+  },
   "/teams/explore": {
     title: "Explore Teams",
     subtitle: "Discover active innovation teams seeking collaborators and mentors",
@@ -103,10 +107,17 @@ export default function TeamCollaborationLayout() {
   const location = useLocation();
   const backendHealth = useBackendHealth();
 
-  const headerMeta = ROUTE_TITLES[location.pathname] ?? {
-    title: "Team Collaboration",
-    subtitle: "Module 3 – Team Formation & Collaboration",
-  };
+  const headerMeta =
+    ROUTE_TITLES[location.pathname] ??
+    (location.pathname.startsWith("/teams/")
+      ? {
+          title: "Team Details & Workspace",
+          subtitle: "Manage roster, challenge alignment, and collaboration settings",
+        }
+      : {
+          title: "Team Collaboration",
+          subtitle: "Module 3 – Team Formation & Collaboration",
+        });
 
   const userRole = user?.role;
   const avatarGradient = userRole

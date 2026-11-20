@@ -73,6 +73,11 @@ app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/api/users", tags=["Users"])
 app.include_router(
     team_collaboration_router,
+    prefix="/api/teams",
+    tags=["Module 3 – Teams"],
+)
+app.include_router(
+    team_collaboration_router,
     prefix="/api/team-collaboration",
     tags=["Module 3 – Team Collaboration"],
 )

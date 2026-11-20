@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import {
   Activity,
@@ -11,6 +11,7 @@ import {
   FolderKanban,
   MapPin,
   MessageSquare,
+  Plus,
   RefreshCw,
   Server,
   Sparkles,
@@ -29,7 +30,8 @@ import {
   MOCK_RECENT_TEAMS,
   MOCK_UPCOMING_MEETINGS,
 } from "../data/mockDashboardData";
-import type { AuthUser, PreviewViewState } from "../types";
+import teamApi from "../services/teamApi";
+import type { AuthUser, PreviewViewState, Team } from "../types";
 
 const TEAM_STATUS_BADGE = {
   Active: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30",
@@ -60,8 +62,36 @@ export default function TeamDashboard() {
   const { user } = useAuth() as { user: AuthUser | null };
   const { backendHealth } = useOutletContext<TeamOutletContext>();
   const [viewState, setViewState] = useState<PreviewViewState>("ready");
+  const [liveTeams, setLiveTeams] = useState<Team[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    teamApi
+      .getMyTeams(1, 5)
+      .then((res) => {
+        if (active && res.teams) {
+          setLiveTeams(res.teams);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const firstName = user?.name ? user.name.split(" ")[0] : "Innovator";
+
+  // Compute dynamic stats based on live data if available
+  const statsToRender = MOCK_DASHBOARD_STATS.map((stat) => {
+    if (stat.id === "joined-teams" && liveTeams.length > 0) {
+      return {
+        ...stat,
+        value: liveTeams.length,
+        changeText: `${liveTeams.filter((t) => t.is_leader).length} as Lead · ${liveTeams.filter((t) => !t.is_leader).length} as Member`,
+      };
+    }
+    return stat;
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -71,7 +101,7 @@ export default function TeamDashboard() {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-accent-400">
               <Sparkles size={13} />
-              <span>Phase 1 Foundation · Temporary Mock Dashboard Data</span>
+              <span>Phase 2 Operational · Live Team Management Active</span>
             </div>
             <h2 className="text-2xl font-bold text-white tracking-tight">
               Welcome back, {firstName}
@@ -80,6 +110,14 @@ export default function TeamDashboard() {
               Coordinate multidisciplinary teams tackling civic, environmental,
               and rural innovation challenges across Jharkhand.
             </p>
+            <div className="pt-2">
+              <Link
+                to="/teams/create"
+                className="btn-primary text-xs px-4 py-2 inline-flex items-center gap-1.5 shadow-md shadow-primary-500/25"
+              >
+                <Plus size={15} /> Form a New Team
+              </Link>
+            </div>
           </div>
 
           {/* Quick UI State Inspector (for verifying loading, empty & error states) */}
@@ -207,7 +245,7 @@ export default function TeamDashboard() {
           {/* ── 5 Required Statistics Cards ────────────────────────────── */}
           <section aria-label="Team Collaboration Statistics">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              {MOCK_DASHBOARD_STATS.map((stat) => (
+              {statsToRender.map((stat) => (
                 <StatCard key={stat.id} stat={stat} />
               ))}
             </div>

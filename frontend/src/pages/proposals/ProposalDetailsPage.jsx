@@ -8,7 +8,7 @@ import {
   Trash2,
   RotateCcw,
   ExternalLink,
-  Github,
+  GitBranch as Github,
   Globe,
   FileText,
   Users,

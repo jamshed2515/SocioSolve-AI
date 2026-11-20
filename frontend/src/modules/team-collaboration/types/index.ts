@@ -10,6 +10,65 @@ export interface AuthUser {
   isVerified?: boolean;
 }
 
+export type TeamStatus = "recruiting" | "full" | "active" | "completed";
+
+export interface TeamMember {
+  user_id: string;
+  name?: string;
+  email?: string;
+  role: string;
+  joined_at: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description: string;
+  challenge_id: string;
+  challenge_title?: string;
+  challenge_category?: string;
+  leader_id: string;
+  leader_name?: string;
+  members: TeamMember[];
+  member_count: number;
+  max_members: number;
+  status: TeamStatus;
+  is_leader?: boolean;
+  is_member?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamListResponse {
+  teams: Team[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface ChallengeOption {
+  id: string;
+  title: string;
+  category?: string;
+  description?: string;
+  location?: string;
+  status?: string;
+}
+
+export interface CreateTeamPayload {
+  name: string;
+  description: string;
+  challenge_id: string;
+  max_members: number;
+}
+
+export interface UpdateTeamPayload {
+  name?: string;
+  description?: string;
+  max_members?: number;
+}
+
 export interface DashboardStatItem {
   id: string;
   label: string;
@@ -94,4 +153,3 @@ export interface BackendHealthState {
 }
 
 export type PreviewViewState = "ready" | "loading" | "empty" | "error";
-

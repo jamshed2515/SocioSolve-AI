@@ -37,6 +37,8 @@ import Unauthorized from "./pages/Unauthorized";
 import TeamCollaborationLayout from "./modules/team-collaboration/components/TeamCollaborationLayout";
 import TeamDashboard           from "./modules/team-collaboration/pages/TeamDashboard";
 import MyTeams                 from "./modules/team-collaboration/pages/MyTeams";
+import CreateTeam              from "./modules/team-collaboration/pages/CreateTeam";
+import TeamDetails             from "./modules/team-collaboration/pages/TeamDetails";
 import ExploreTeams            from "./modules/team-collaboration/pages/ExploreTeams";
 import TeamInvitations         from "./modules/team-collaboration/pages/TeamInvitations";
 import TeamDiscussion          from "./modules/team-collaboration/pages/TeamDiscussion";
@@ -130,11 +132,13 @@ export default function App() {
           <Route path="/teams" element={<TeamCollaborationLayout />}>
             <Route index element={<TeamDashboard />} />
             <Route path="my-teams"    element={<MyTeams />} />
+            <Route path="create"      element={<CreateTeam />} />
             <Route path="explore"     element={<ExploreTeams />} />
             <Route path="invitations" element={<TeamInvitations />} />
             <Route path="discussions" element={<TeamDiscussion />} />
             <Route path="tasks"       element={<TeamTasks />} />
             <Route path="meetings"    element={<TeamMeetings />} />
+            <Route path=":id"         element={<TeamDetails />} />
           </Route>
 
           {/* ── 404 fallback ───────────────────────────────── */}
