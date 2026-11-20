@@ -19,6 +19,13 @@ import AdminDashboard      from "./pages/dashboards/AdminDashboard";
 import MyProfile   from "./pages/profile/MyProfile";
 import EditProfile from "./pages/profile/EditProfile";
 
+// Module 4 – Solution Proposals & Evaluation
+import ProposalDashboard   from "./pages/proposals/ProposalDashboard";
+import MyProposals         from "./pages/proposals/MyProposals";
+import ProposalFormPage    from "./pages/proposals/ProposalFormPage";
+import ProposalDetailsPage from "./pages/proposals/ProposalDetailsPage";
+import ReviewQueuePage     from "./pages/proposals/ReviewQueuePage";
+
 // Route guards
 import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleRoute      from "./routes/RoleRoute";
@@ -70,6 +77,26 @@ export default function App() {
           } />
           <Route path="/profile/edit" element={
             <ProtectedRoute><EditProfile /></ProtectedRoute>
+          } />
+
+          {/* ── Module 4: Solution Proposals & Evaluation ─── */}
+          <Route path="/proposals" element={
+            <ProtectedRoute><ProposalDashboard /></ProtectedRoute>
+          } />
+          <Route path="/proposals/my" element={
+            <ProtectedRoute><MyProposals /></ProtectedRoute>
+          } />
+          <Route path="/proposals/new" element={
+            <ProtectedRoute><ProposalFormPage /></ProtectedRoute>
+          } />
+          <Route path="/proposals/review-queue" element={
+            <ProtectedRoute><ReviewQueuePage /></ProtectedRoute>
+          } />
+          <Route path="/proposals/:id" element={
+            <ProtectedRoute><ProposalDetailsPage /></ProtectedRoute>
+          } />
+          <Route path="/proposals/:id/edit" element={
+            <ProtectedRoute><ProposalFormPage /></ProtectedRoute>
           } />
 
           {/* ── Role-specific Dashboards ───────────────────── */}

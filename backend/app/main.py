@@ -14,6 +14,7 @@ from app.config.settings import settings
 from app.config.database import connect_to_mongo, close_mongo_connection
 from app.routes.auth_routes import router as auth_router
 from app.routes.user_routes import router as user_router
+from app.routes.proposal_routes import router as proposal_router
 from app.modules.team_collaboration.router import router as team_collaboration_router
 
 limiter = Limiter(key_func=get_remote_address)
@@ -31,8 +32,9 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting SocioSolve-AI backend...")
     await connect_to_mongo()
 
-    # Ensure upload directory exists
+    # Ensure upload directories exist
     os.makedirs("uploads/avatars", exist_ok=True)
+    os.makedirs("uploads/proposals", exist_ok=True)
 
     yield
 
@@ -43,7 +45,7 @@ async def lifespan(app: FastAPI):
 # ── App instance ────────────────────────────────────────────────────────────
 app = FastAPI(
     title="SocioSolve-AI API",
-    description="Authentication & User Management – Module 1",
+    description="Authentication & User Management – Module 1 | Team Formation & Collaboration – Module 3 | Solution Proposals & Evaluation – Module 4",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -61,8 +63,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Static files (uploaded avatars) ────────────────────────────────────────
+# ── Static files (uploaded avatars & proposal documents) ───────────────────
 os.makedirs("uploads/avatars", exist_ok=True)
+os.makedirs("uploads/proposals", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # ── Routers ─────────────────────────────────────────────────────────────────
@@ -72,6 +75,11 @@ app.include_router(
     team_collaboration_router,
     prefix="/api/team-collaboration",
     tags=["Module 3 – Team Collaboration"],
+)
+app.include_router(
+    proposal_router,
+    prefix="/api/proposals",
+    tags=["Module 4 - Proposals & Evaluation"],
 )
 
 

@@ -11,6 +11,35 @@
 
 ---
 
+## 📦 Module 4 – Solution Proposals & Evaluation
+
+**Developer:** Gudiya Kumari (Member 4)  
+**Deliverable:** End-to-end solution proposal submission, draft management, structured rubric evaluation, and controlled status workflow (`Draft -> Submitted -> Under Review -> Accepted / Rejected`).
+
+### Module 4 API Endpoints (`/api/proposals`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/proposals/dashboard-stats` | Proposal dashboard KPIs, status distribution & recent activity |
+| GET | `/api/proposals` | Search, filter (status, challenge, date), sort & paginate proposals |
+| GET | `/api/proposals/my` | Get current user's / team's proposals & drafts |
+| GET | `/api/proposals/review-queue` | Get reviewable proposals for authorized reviewers & admins |
+| GET | `/api/proposals/challenges/published` | List published societal challenges eligible for proposals |
+| GET | `/api/proposals/rubric-criteria` | Get 5-criterion grading rubric configuration |
+| POST | `/api/proposals` | Create a new proposal (Draft or immediate Submit) |
+| GET | `/api/proposals/{id}` | Get full proposal details, evaluation scorecard & status history |
+| PUT | `/api/proposals/{id}` | Update a draft proposal |
+| DELETE | `/api/proposals/{id}` | Delete a draft proposal |
+| POST | `/api/proposals/{id}/submit` | Validate & submit a draft proposal for evaluation |
+| POST | `/api/proposals/{id}/withdraw` | Withdraw a submitted proposal before review decision |
+| GET | `/api/proposals/{id}/reviews` | Get reviewer evaluations & aggregate rubric scores |
+| POST | `/api/proposals/{id}/reviews` | Save review draft or submit official rubric evaluation |
+| GET | `/api/proposals/{id}/status-history` | Get chronological status workflow audit trail |
+| POST | `/api/proposals/{id}/status` | Transition status (`Under Review`, `Accepted`, `Rejected`) |
+| POST | `/api/proposals/upload-document` | Upload supporting documents & implementation plans |
+
+---
+
 ## 🗂️ Project Structure
 
 ```
@@ -18,20 +47,22 @@ SocioSolve-AI/
 ├── backend/          # FastAPI backend (Python)
 │   ├── app/
 │   │   ├── config/       # DB connection & settings
-│   │   ├── models/       # MongoDB document models
-│   │   ├── schemas/      # Pydantic schemas
-│   │   ├── routes/       # API route handlers
-│   │   ├── services/     # Business logic
+│   │   ├── models/       # MongoDB document models (user, proposal)
+│   │   ├── schemas/      # Pydantic schemas (auth, profile, proposal)
+│   │   ├── routes/       # API route handlers (auth, users, proposals)
+│   │   ├── services/     # Business logic (auth, profile, proposal_service)
 │   │   ├── middleware/   # Auth dependencies (JWT + RBAC)
 │   │   └── utils/        # JWT & password helpers
+│   ├── tests/            # Automated tests (Module 4 workflow tests)
 │   ├── requirements.txt
 │   ├── Dockerfile
 │   └── .env.example
 ├── frontend/         # React + Vite + Tailwind CSS
 │   └── src/
-│       ├── pages/        # Auth pages + 5 dashboards + profile
+│       ├── pages/        # Auth + Dashboards + Profile + Module 4 Proposals & Review Queue
+│       ├── components/   # Layouts & Proposal status/stepper components
 │       ├── context/      # AuthContext (global state)
-│       ├── services/     # Axios API layer
+│       ├── services/     # Axios API layer (api, authService, proposalService)
 │       └── routes/       # Protected & role-based routes
 ├── docker-compose.yml
 └── README.md
@@ -78,7 +109,7 @@ App → http://localhost:5173
 
 ---
 
-## 🔗 API Endpoints
+## 🔗 Auth & User API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -127,9 +158,9 @@ docker-compose up --build
 
 | Member | Module |
 |--------|--------|
-| Member 1 | **Authentication & User Management** ← *this repo* |
+| Member 1 | **Authentication & User Management** |
 | Member 2 | Challenge Management |
 | Member 3 | Team Collaboration |
-| Member 4 | Solution Proposals |
+| Member 4 | **Solution Proposals & Evaluation (Gudiya Kumari)** |
 | Member 5 | AI Recommendation |
 | Member 6 | Industry & Admin |
