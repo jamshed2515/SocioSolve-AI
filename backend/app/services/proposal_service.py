@@ -1187,19 +1187,31 @@ async def upload_proposal_document(file: UploadFile, doc_type: str, current_user
             detail="File size exceeds the 10 MB maximum limit.",
         )
 
-    safe_dir = os.path.join("uploads", "proposals")
-    os.makedirs(safe_dir, exist_ok=True)
-
     clean_stem = re.sub(r"[^a-zA-Z0-9_-]", "_", os.path.splitext(filename)[0])[:40]
-    unique_filename = f"{uuid.uuid4().hex[:10]}_{clean_stem}{ext}"
-    file_path = os.path.join(safe_dir, unique_filename)
+    public_stem = f"{uuid.uuid4().hex[:10]}_{clean_stem}"
+    unique_filename = f"{public_stem}{ext}"
 
-    with open(file_path, "wb") as f:
-        f.write(content)
+    from app.utils.cloudinary_storage import is_cloudinary_configured, upload_bytes_to_cloudinary
+
+    if is_cloudinary_configured():
+        file_url = await upload_bytes_to_cloudinary(
+            content,
+            folder="sociosolve/proposals",
+            public_id=public_stem,
+            resource_type="auto",
+            filename=unique_filename,
+        )
+    else:
+        safe_dir = os.path.join("uploads", "proposals")
+        os.makedirs(safe_dir, exist_ok=True)
+        file_path = os.path.join(safe_dir, unique_filename)
+        with open(file_path, "wb") as f:
+            f.write(content)
+        file_url = f"/uploads/proposals/{unique_filename}"
 
     return {
         "name": filename,
-        "url": f"/uploads/proposals/{unique_filename}",
+        "url": file_url,
         "docType": doc_type or "supporting_document",
         "sizeBytes": size_bytes,
     }

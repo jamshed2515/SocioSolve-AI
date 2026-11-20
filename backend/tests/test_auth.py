@@ -218,3 +218,32 @@ def test_unverified_email_cannot_hijack_legacy_profile(client, db):
     asyncio.run(db.users.insert_one({"email": "old@x.com", "role": "citizen", "name": "Old"}))
     TOKENS["t"] = make_claims("new", "old@x.com", verified=False)
     assert client.post("/api/auth/sync-user", headers=auth("t"), json={"requestedRole": "citizen"}).status_code == 409
+
+
+def test_profile_image_uploads_to_cloudinary_when_configured(client, monkeypatch):
+    from app.services import profile_service
+
+    captured = {}
+
+    async def fake_upload(contents, *, folder, public_id, resource_type="auto", filename=None):
+        captured["folder"] = folder
+        captured["resource_type"] = resource_type
+        captured["size"] = len(contents)
+        return f"https://res.cloudinary.com/drg63nu8h/image/upload/{folder}/{public_id}.png"
+
+    monkeypatch.setattr(profile_service, "is_cloudinary_configured", lambda: True)
+    monkeypatch.setattr(profile_service, "upload_bytes_to_cloudinary", fake_upload)
+
+    register(client, "t", "u", "a@x.com", "citizen")
+    r = client.put(
+        "/api/users/profile-image",
+        headers=auth("t"),
+        files={"file": ("avatar.png", b"\x89PNG\r\n\x1a\nfakebytes", "image/png")},
+    )
+    assert r.status_code == 200, r.text
+    url = r.json()["profileImageUrl"]
+    assert url.startswith("https://res.cloudinary.com/drg63nu8h/image/upload/sociosolve/avatars/")
+    assert captured["folder"] == "sociosolve/avatars"
+    assert captured["resource_type"] == "image"
+    prof = client.get("/api/users/profile", headers=auth("t")).json()
+    assert prof["profileImage"] == url

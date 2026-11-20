@@ -15,6 +15,7 @@ from app.schemas.profile_schema import (
     ProfileImageResponse,
     user_to_profile,
 )
+from app.utils.cloudinary_storage import is_cloudinary_configured, upload_bytes_to_cloudinary
 
 AVATAR_DIR = "uploads/avatars"
 ALLOWED_IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
@@ -51,13 +52,23 @@ async def upload_profile_image(user: dict, file: UploadFile) -> ProfileImageResp
     if len(contents) > MAX_IMAGE_SIZE:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "File too large. Max size is 5 MB.")
 
-    # Server-generated filename only (never trust the client filename)
-    filename = f"{user['_id']}_{uuid.uuid4().hex}.{ext}"
-    os.makedirs(AVATAR_DIR, exist_ok=True)
-    with open(os.path.join(AVATAR_DIR, filename), "wb") as f:
-        f.write(contents)
+    # Server-generated identifier only (never trust the client filename)
+    stem = f"{user['_id']}_{uuid.uuid4().hex}"
+    if is_cloudinary_configured():
+        image_url = await upload_bytes_to_cloudinary(
+            contents,
+            folder="sociosolve/avatars",
+            public_id=stem,
+            resource_type="image",
+            filename=f"{stem}.{ext}",
+        )
+    else:
+        filename = f"{stem}.{ext}"
+        os.makedirs(AVATAR_DIR, exist_ok=True)
+        with open(os.path.join(AVATAR_DIR, filename), "wb") as f:
+            f.write(contents)
+        image_url = f"/uploads/avatars/{filename}"
 
-    image_url = f"/uploads/avatars/{filename}"
     await db.users.update_one(
         {"_id": user["_id"]},
         {"$set": {"profile_image": image_url, "updated_at": datetime.now(timezone.utc)}},
