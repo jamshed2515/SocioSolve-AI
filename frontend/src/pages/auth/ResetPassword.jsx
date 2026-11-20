@@ -1,18 +1,43 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, KeyRound, Zap, CheckCircle } from "lucide-react";
-import authService from "../../services/authService";
+import { Eye, EyeOff, KeyRound, Zap, CheckCircle, AlertTriangle } from "lucide-react";
+import authService, { firebaseErrorMessage } from "../../services/authService";
 import toast from "react-hot-toast";
 
 export default function ResetPassword() {
   const [params]          = useSearchParams();
   const navigate          = useNavigate();
-  const token             = params.get("token") || "";
-  const [newPwd, setNewPwd]       = useState("");
+  const oobCode           = params.get("oobCode") || params.get("token") || "";
+  const [verifying, setVerifying]   = useState(Boolean(oobCode));
+  const [codeError, setCodeError]   = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [newPwd, setNewPwd]         = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
-  const [showPwd, setShowPwd]     = useState(false);
-  const [loading, setLoading]     = useState(false);
-  const [done, setDone]           = useState(false);
+  const [showPwd, setShowPwd]       = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [done, setDone]             = useState(false);
+
+  useEffect(() => {
+    if (!oobCode) return;
+    const cancelled = { current: false };
+    authService
+      .verifyResetCode(oobCode)
+      .then((email) => {
+        if (!cancelled.current) {
+          setResetEmail(email || "");
+          setCodeError("");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled.current) setCodeError(firebaseErrorMessage(err));
+      })
+      .finally(() => {
+        if (!cancelled.current) setVerifying(false);
+      });
+    return () => {
+      cancelled.current = true;
+    };
+  }, [oobCode]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,21 +48,42 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
-      await authService.resetPassword(token, newPwd, confirmPwd);
+      await authService.resetPassword(oobCode, newPwd);
       setDone(true);
       toast.success("Password reset successfully!");
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Invalid or expired token");
+      toast.error(firebaseErrorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
-  if (!token) return (
+  if (!oobCode) return (
     <div className="min-h-screen bg-hero-gradient flex items-center justify-center p-4">
       <div className="glass p-8 text-center max-w-sm">
-        <p className="text-red-400 mb-4">Invalid reset link. No token found.</p>
+        <p className="text-red-400 mb-4">Invalid reset link. No reset code found.</p>
         <Link to="/forgot-password" className="btn-primary">Request a new link</Link>
+      </div>
+    </div>
+  );
+
+  if (verifying) return (
+    <div className="min-h-screen bg-hero-gradient flex items-center justify-center p-4">
+      <div className="glass p-8 text-center max-w-sm">
+        <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-white/60 text-sm">Verifying reset link...</p>
+      </div>
+    </div>
+  );
+
+  if (codeError) return (
+    <div className="min-h-screen bg-hero-gradient flex items-center justify-center p-4">
+      <div className="glass p-8 text-center max-w-sm">
+        <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle className="text-red-400" size={24} />
+        </div>
+        <p className="text-red-400 mb-4 text-sm">{codeError}</p>
+        <Link to="/forgot-password" className="btn-primary w-full">Request a new link</Link>
       </div>
     </div>
   );
@@ -61,6 +107,9 @@ export default function ResetPassword() {
                 <KeyRound className="text-primary-400" size={22} />
               </div>
               <h2 className="text-xl font-semibold text-white mb-1">Set new password</h2>
+              {resetEmail && (
+                <p className="text-primary-400 text-xs mb-1">Account: {resetEmail}</p>
+              )}
               <p className="text-white/40 text-sm mb-6">
                 Min 8 characters · 1 uppercase · 1 number
               </p>

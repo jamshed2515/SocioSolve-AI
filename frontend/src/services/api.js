@@ -1,4 +1,5 @@
 import axios from "axios";
+import { signOut } from "firebase/auth";
 import { auth } from "../config/firebase";
 
 const RAW_API_URL = (
@@ -42,7 +43,6 @@ api.interceptors.response.use(
       }
     }
     if (error.response?.status === 401 && original?._retry) {
-      const { signOut } = await import("firebase/auth");
       await signOut(auth).catch(() => {});
     }
     return Promise.reject(error);

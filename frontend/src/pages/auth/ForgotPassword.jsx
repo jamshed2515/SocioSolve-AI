@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, Zap } from "lucide-react";
-import authService from "../../services/authService";
+import authService, { firebaseErrorMessage } from "../../services/authService";
 import toast from "react-hot-toast";
 
 export default function ForgotPassword() {
@@ -11,13 +11,14 @@ export default function ForgotPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email) return toast.error("Please enter your email");
+    if (!email.trim()) return toast.error("Please enter your email");
     setLoading(true);
     try {
-      await authService.forgotPassword(email);
+      await authService.forgotPassword(email.trim());
       setSubmitted(true);
+      toast.success("Password reset email sent!");
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Something went wrong");
+      toast.error(firebaseErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -43,7 +44,7 @@ export default function ForgotPassword() {
               </div>
               <h2 className="text-xl font-semibold text-white mb-1">Forgot your password?</h2>
               <p className="text-white/40 text-sm mb-6">
-                Enter your email and we'll send you a reset link (or print it to console in dev mode).
+                Enter your registered email address and we&apos;ll send you a Firebase password reset link.
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -72,8 +73,8 @@ export default function ForgotPassword() {
               </div>
               <h2 className="text-xl font-semibold text-white mb-2">Check your email</h2>
               <p className="text-white/50 text-sm">
-                If <span className="text-primary-400 font-medium">{email}</span> exists in our system,
-                a reset link has been sent. Check your console in dev mode.
+                If <span className="text-primary-400 font-medium">{email}</span> is registered,
+                a password reset link has been sent to your inbox. Please check your spam folder if you don&apos;t see it shortly.
               </p>
             </div>
           )}

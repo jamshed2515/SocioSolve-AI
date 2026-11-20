@@ -3,10 +3,11 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import authService from "../../services/authService";
+import { API_ORIGIN } from "../../services/api";
 import toast from "react-hot-toast";
 import {
-  User, Mail, Phone, Building2, Globe, MapPin,
-  Edit3, Camera, Tag, Calendar, CheckCircle2, XCircle,
+  Mail, Phone, Building2, Globe, MapPin,
+  Edit3, Camera, Tag, Calendar, CheckCircle2, XCircle, Clock,
 } from "lucide-react";
 
 export default function MyProfile() {
@@ -46,6 +47,12 @@ export default function MyProfile() {
   };
   const gradient = ROLE_GRADIENT[user?.role] || "from-primary-500 to-accent-400";
 
+  const avatarSrc = profile?.profileImage
+    ? /^https?:\/\//i.test(profile.profileImage)
+      ? profile.profileImage
+      : `${API_ORIGIN}${profile.profileImage}`
+    : null;
+
   if (!profile) return (
     <DashboardLayout title="My Profile">
       <div className="flex items-center justify-center h-64">
@@ -64,8 +71,8 @@ export default function MyProfile() {
             {/* Avatar */}
             <div className="relative flex-shrink-0">
               <div className={`w-24 h-24 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-3xl font-bold text-white overflow-hidden`}>
-                {profile.profileImage
-                  ? <img src={`http://localhost:8000${profile.profileImage}`} alt="avatar" className="w-full h-full object-cover" />
+                {avatarSrc
+                  ? <img src={avatarSrc} alt="avatar" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                   : profile.name?.[0]?.toUpperCase()}
               </div>
               <button
@@ -92,6 +99,16 @@ export default function MyProfile() {
                 {profile.isActive
                   ? <span className="badge bg-emerald-500/20 text-emerald-300">Active</span>
                   : <span className="badge bg-red-500/20 text-red-300">Inactive</span>}
+                {profile.approvalStatus === "pending" && (
+                  <span className="badge bg-amber-500/20 text-amber-300 flex items-center gap-1">
+                    <Clock size={12} />Pending Approval
+                  </span>
+                )}
+                {profile.approvalStatus === "rejected" && (
+                  <span className="badge bg-red-500/20 text-red-300 flex items-center gap-1">
+                    <XCircle size={12} />Rejected
+                  </span>
+                )}
               </div>
             </div>
 

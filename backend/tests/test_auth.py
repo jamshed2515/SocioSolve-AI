@@ -139,12 +139,63 @@ def test_change_password_rules(client):
     assert client.put("/api/users/change-password", headers=auth("goog"), json=ok).status_code == 400
 
 
-# 15 - inactive user rejected
+# 15 - inactive user rejected (sync-user, /me, /profile, and admin deactivation)
 def test_inactive_user_rejected(client, db):
     register(client, "t", "u", "a@x.com", "citizen")
     db.users.docs[0]["is_active"] = False
+    assert client.post("/api/auth/sync-user", headers=auth("t"), json={}).status_code == 403
     assert client.get("/api/auth/me", headers=auth("t")).status_code == 403
     assert client.get("/api/users/profile", headers=auth("t")).status_code == 403
+
+
+def test_admin_pending_list_and_rejection_flow(client, db):
+    from app.models.user import new_user_document, UserRole
+    import asyncio
+
+    # Register pending industry user
+    r = register(client, "ind", "ind1", "ind@x.com", "industry", organization={"name": "TechCorp"})
+    assert r.status_code == 200
+    ind_user = r.json()["user"]
+    assert ind_user["approvalStatus"] == "pending"
+
+    # Non-admin cannot view pending or reject
+    assert client.get("/api/admin/users/pending", headers=auth("ind")).status_code == 403
+    assert client.put(f"/api/admin/users/{ind_user['id']}/approval", headers=auth("ind"), json={"approve": True}).status_code == 403
+
+    # Admin lists pending users & rejects
+    asyncio.run(db.users.insert_one(new_user_document("adm", "admin@x.com", "Admin", UserRole.ADMIN, True)))
+    TOKENS["a"] = make_claims("adm", "admin@x.com")
+    pending = client.get("/api/admin/users/pending", headers=auth("a"))
+    assert pending.status_code == 200
+    assert any(u["id"] == ind_user["id"] for u in pending.json())
+
+    rej = client.put(f"/api/admin/users/{ind_user['id']}/approval", headers=auth("a"), json={"approve": False})
+    assert rej.status_code == 200 and rej.json()["approvalStatus"] == "rejected"
+    assert client.get("/api/dashboard/industry", headers=auth("ind")).status_code == 403
+
+    # Pending list no longer includes rejected user
+    pending_after = client.get("/api/admin/users/pending", headers=auth("a"))
+    assert pending_after.status_code == 200
+    assert all(u["id"] != ind_user["id"] for u in pending_after.json())
+
+
+def test_admin_deactivate_user_revokes_and_blocks(client, db, monkeypatch):
+    from app.models.user import new_user_document, UserRole
+    import asyncio
+
+    revoked = []
+    monkeypatch.setattr(fb_auth, "revoke_refresh_tokens", lambda uid: revoked.append(uid))
+
+    r = register(client, "c", "cit1", "cit@x.com", "citizen")
+    cit_id = r.json()["user"]["id"]
+    asyncio.run(db.users.insert_one(new_user_document("adm", "admin@x.com", "Admin", UserRole.ADMIN, True)))
+    TOKENS["a"] = make_claims("adm", "admin@x.com")
+
+    res = client.put(f"/api/admin/users/{cit_id}/active", params={"active": False}, headers=auth("a"))
+    assert res.status_code == 200 and res.json()["isActive"] is False
+    assert "cit1" in revoked
+    assert client.post("/api/auth/sync-user", headers=auth("c"), json={}).status_code == 403
+    assert client.get("/api/auth/me", headers=auth("c")).status_code == 403
 
 
 # Sync retry: Firebase account exists but first Mongo write failed

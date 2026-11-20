@@ -86,6 +86,9 @@ class FakeDB:
 
 TOKENS = {}  # token string -> claims
 
+# Ensure `from tests.conftest import TOKENS` shares this exact module when pytest loads `conftest` directly
+sys.modules.setdefault("tests.conftest", sys.modules[__name__])
+
 
 def make_claims(uid, email, provider="password", verified=True, auth_time=None, **extra):
     import time

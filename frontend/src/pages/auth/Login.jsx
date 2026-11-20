@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,10 +14,27 @@ const schema = z.object({
 });
 
 export default function Login() {
-  const { login, loginWithGoogle } = useAuth();
+  const {
+    login,
+    loginWithGoogle,
+    user,
+    loading: authLoading,
+    needsProfile,
+    ROLE_DASHBOARD,
+  } = useAuth();
+  const navigate = useNavigate();
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    if (authLoading || loading || googleLoading) return;
+    if (needsProfile) {
+      navigate("/complete-profile", { replace: true });
+    } else if (user) {
+      navigate(ROLE_DASHBOARD[user.role] || "/", { replace: true });
+    }
+  }, [authLoading, loading, googleLoading, needsProfile, user, navigate, ROLE_DASHBOARD]);
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(schema),

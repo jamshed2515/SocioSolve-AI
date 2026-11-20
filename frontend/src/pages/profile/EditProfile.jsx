@@ -2,13 +2,17 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
-import authService from "../../services/authService";
+import authService, { firebaseErrorMessage } from "../../services/authService";
 import toast from "react-hot-toast";
-import { Save, Plus, X, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Save, Plus, X, KeyRound, Eye, EyeOff, Info } from "lucide-react";
 
 export default function EditProfile() {
-  const { user, updateUser } = useAuth();
+  const { user, firebaseUser, updateUser, logout } = useAuth();
   const navigate = useNavigate();
+
+  const hasPasswordProvider = Boolean(
+    firebaseUser?.providerData?.some((p) => p.providerId === "password")
+  );
 
   const [loading, setSaving]  = useState(false);
   const [profile, setProfile] = useState(null);
@@ -50,7 +54,7 @@ export default function EditProfile() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await authService.updateProfile({
+      await authService.updateProfile({
         name:         form.name,
         phone:        form.phone || undefined,
         skills:       form.skills,
@@ -69,14 +73,19 @@ export default function EditProfile() {
 
   const handlePwdChange = async (e) => {
     e.preventDefault();
+    if (!pwdForm.currentPassword) return toast.error("Please enter your current password");
+    if (pwdForm.newPassword.length < 8) return toast.error("New password must be at least 8 characters");
+    if (!/[A-Z]/.test(pwdForm.newPassword) || !/[0-9]/.test(pwdForm.newPassword)) {
+      return toast.error("Password must contain an uppercase letter and a number");
+    }
     if (pwdForm.newPassword !== pwdForm.confirmPassword) return toast.error("Passwords don't match");
     setPwdLoading(true);
     try {
       await authService.changePassword(pwdForm);
       toast.success("Password changed! Please log in again.");
-      navigate("/login");
+      await logout();
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Password change failed");
+      toast.error(firebaseErrorMessage(err));
     } finally {
       setPwdLoading(false);
     }
@@ -184,39 +193,53 @@ export default function EditProfile() {
         </form>
 
         {/* ── Change Password ──────────────────────────────────── */}
-        <form onSubmit={handlePwdChange} className="glass p-6 space-y-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
-              <KeyRound size={16} className="text-red-400" />
-            </div>
-            <h3 className="text-base font-semibold text-white">Change Password</h3>
-          </div>
-
-          {["currentPassword", "newPassword", "confirmPassword"].map((field, i) => (
-            <div key={field}>
-              <label className="label">{["Current Password", "New Password", "Confirm New Password"][i]}</label>
-              <div className="relative">
-                <input id={`pwd-${field}`} type={showPwd ? "text" : "password"} className="input pr-11"
-                  placeholder="••••••••"
-                  value={pwdForm[field]}
-                  onChange={e => setPwdForm(p => ({ ...p, [field]: e.target.value }))} />
-                {i === 0 && (
-                  <button type="button" onClick={() => setShowPwd(p => !p)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition">
-                    {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                )}
+        {hasPasswordProvider ? (
+          <form onSubmit={handlePwdChange} className="glass p-6 space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <KeyRound size={16} className="text-red-400" />
               </div>
+              <h3 className="text-base font-semibold text-white">Change Password</h3>
             </div>
-          ))}
 
-          <button id="change-password-btn" type="submit" disabled={pwdLoading}
-            className="w-full px-6 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold border border-red-500/20 transition flex items-center justify-center gap-2">
-            {pwdLoading
-              ? <span className="w-5 h-5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
-              : <><KeyRound size={18} /> Update Password</>}
-          </button>
-        </form>
+            {["currentPassword", "newPassword", "confirmPassword"].map((field, i) => (
+              <div key={field}>
+                <label className="label">{["Current Password", "New Password", "Confirm New Password"][i]}</label>
+                <div className="relative">
+                  <input id={`pwd-${field}`} type={showPwd ? "text" : "password"} className="input pr-11"
+                    placeholder="••••••••"
+                    value={pwdForm[field]}
+                    onChange={e => setPwdForm(p => ({ ...p, [field]: e.target.value }))} />
+                  {i === 0 && (
+                    <button type="button" onClick={() => setShowPwd(p => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white transition">
+                      {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <button id="change-password-btn" type="submit" disabled={pwdLoading}
+              className="w-full px-6 py-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-semibold border border-red-500/20 transition flex items-center justify-center gap-2">
+              {pwdLoading
+                ? <span className="w-5 h-5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
+                : <><KeyRound size={18} /> Update Password</>}
+            </button>
+          </form>
+        ) : (
+          <div className="glass p-6 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Info size={16} className="text-primary-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-white">Password Management</h3>
+              <p className="text-sm text-white/50 mt-1">
+                You signed in with an external identity provider (such as Google). Password changes are managed through your Google account settings.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

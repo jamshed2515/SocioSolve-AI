@@ -26,6 +26,9 @@ export function firebaseErrorMessage(err) {
     "auth/user-disabled": "This account has been disabled.",
     "auth/too-many-requests": "Too many attempts. Please try again later.",
     "auth/popup-closed-by-user": "Google sign-in was cancelled.",
+    "auth/popup-blocked": "Popup was blocked by your browser. Please allow popups and try again.",
+    "auth/operation-not-allowed": "This sign-in method is not enabled in Firebase Authentication.",
+    "auth/account-exists-with-different-credential": "An account already exists with this email using a different sign-in method.",
     "auth/expired-action-code": "This reset link has expired.",
     "auth/invalid-action-code": "This reset link is invalid or already used.",
     "auth/requires-recent-login": "Please sign in again to continue.",
@@ -84,6 +87,13 @@ const authService = {
     api.put("/users/profile-image", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
+
+  // ── Admin approval & user management ─────────────────────────
+  getPendingUsers: () => api.get("/admin/users/pending"),
+  setUserApproval: (userId, approve) =>
+    api.put(`/admin/users/${userId}/approval`, { approve }),
+  setUserActive: (userId, active) =>
+    api.put(`/admin/users/${userId}/active`, null, { params: { active } }),
 };
 
 export default authService;

@@ -1,5 +1,6 @@
 import DashboardLayout from "../../components/layouts/DashboardLayout";
-import { Building2, Users, FlaskConical, Award, FileText, ArrowRight } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import { Building2, Users, FlaskConical, Award, FileText, ArrowRight, Clock, XCircle } from "lucide-react";
 
 const stats = [
   { label: "Active Students",    value: "248", icon: Users,       color: "text-amber-400",   bg: "bg-amber-500/10" },
@@ -15,8 +16,42 @@ const projects = [
 ];
 
 export default function UniversityDashboard() {
+  const { user } = useAuth();
+  const isPending = user?.approvalStatus === "pending";
+  const isRejected = user?.approvalStatus === "rejected";
+
   return (
     <DashboardLayout title="University Dashboard">
+      {isPending && (
+        <div
+          id="approval-pending-banner"
+          className="mb-6 p-4 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-start gap-3"
+        >
+          <Clock className="text-amber-400 shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="text-sm font-semibold text-amber-200">Account Pending Admin Approval</p>
+            <p className="text-xs text-amber-200/80 mt-0.5">
+              Your university account is currently awaiting administrator review. Protected institutional actions remain restricted until approval is granted.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isRejected && (
+        <div
+          id="approval-rejected-banner"
+          className="mb-6 p-4 rounded-xl bg-red-500/15 border border-red-500/30 flex items-start gap-3"
+        >
+          <XCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="text-sm font-semibold text-red-200">Account Approval Rejected</p>
+            <p className="text-xs text-red-200/80 mt-0.5">
+              Your university account application was not approved. Please contact an administrator for assistance.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Welcome banner */}
       <div className="glass p-6 mb-6 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/20">
         <div className="flex items-center gap-4">

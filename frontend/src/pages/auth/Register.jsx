@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Eye, EyeOff, UserPlus, Zap, ChevronRight, ChevronLeft } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { firebaseErrorMessage } from "../../services/authService";
 import toast from "react-hot-toast";
 
 /* ── Validation schemas per step ──────────────────────────────────────────── */
@@ -30,7 +31,13 @@ const ROLES = [
 ];
 
 export default function Register() {
-  const { register: registerUser } = useAuth();
+  const {
+    register: registerUser,
+    user,
+    loading: authLoading,
+    needsProfile,
+    ROLE_DASHBOARD,
+  } = useAuth();
   const navigate = useNavigate();
 
   const [step, setStep]         = useState(1);   // 1=basic, 2=role, 3=org details
@@ -40,7 +47,16 @@ export default function Register() {
   const [selectedRole, setSelectedRole] = useState("");
   const [formData, setFormData] = useState({});
 
-  const { register, handleSubmit, formState: { errors }, getValues } = useForm({
+  useEffect(() => {
+    if (authLoading || loading) return;
+    if (needsProfile) {
+      navigate("/complete-profile", { replace: true });
+    } else if (user) {
+      navigate(ROLE_DASHBOARD[user.role] || "/", { replace: true });
+    }
+  }, [authLoading, loading, needsProfile, user, navigate, ROLE_DASHBOARD]);
+
+  const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(step1Schema),
   });
 
@@ -72,11 +88,14 @@ export default function Register() {
         role:            selectedRole,
         organization:    Object.keys(orgData).length ? orgData : undefined,
       };
-      await registerUser(payload);
-      toast.success("Account created! Please log in.");
-      navigate("/login");
+      const result = await registerUser(payload);
+      if (result?.user?.approvalStatus === "pending") {
+        toast.success("Account created! Your organization account is pending admin approval.");
+      } else {
+        toast.success("Account created! Welcome to SocioSolve-AI 🎉");
+      }
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Registration failed");
+      toast.error(firebaseErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -193,6 +212,12 @@ export default function Register() {
                   </button>
                 ))}
               </div>
+
+              {needsOrg && (
+                <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+                  ⚠️ University and Industry accounts require <strong>admin approval</strong> before full platform access is enabled.
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <button type="button" onClick={() => setStep(1)} className="btn-ghost flex-1">

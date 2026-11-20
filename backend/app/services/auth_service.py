@@ -16,6 +16,7 @@ from app.models.user import (
     REQUESTABLE_ROLES,
     APPROVAL_REQUIRED_ROLES,
     new_user_document,
+    is_active,
 )
 from app.schemas.auth_schema import SyncUserRequest, SyncUserResponse
 from app.schemas.profile_schema import user_to_profile
@@ -37,9 +38,14 @@ async def sync_user(claims: dict, payload: SyncUserRequest) -> SyncUserResponse:
     if not email:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Firebase account has no email address.")
 
-    # 1. Existing linked profile -> refresh identity fields from the TRUSTED token only
+    # 1. Existing linked profile -> enforce active check, then refresh identity fields from TRUSTED token only
     user = await db.users.find_one({"firebase_uid": uid})
     if user:
+        if not is_active(user):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Account is deactivated. Contact an administrator.",
+            )
         updates = {"email": email, "is_verified": email_verified, "updated_at": now}
         if not user.get("profile_image") and claims.get("picture"):
             updates["profile_image"] = claims["picture"]
@@ -52,6 +58,11 @@ async def sync_user(claims: dict, payload: SyncUserRequest) -> SyncUserResponse:
     if existing:
         if existing.get("firebase_uid"):
             raise HTTPException(status.HTTP_409_CONFLICT, "Email is linked to another account.")
+        if not is_active(existing):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Account is deactivated. Contact an administrator.",
+            )
         if not email_verified:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
