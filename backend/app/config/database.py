@@ -12,22 +12,17 @@ async def connect_to_mongo():
     """Create MongoDB Atlas connection on startup."""
     global client, db
     try:
-        client = AsyncIOMotorClient(settings.MONGODB_URL)
+        client = AsyncIOMotorClient(settings.mongodb_uri)
         db = client[settings.DATABASE_NAME]
-
-        # Verify connection
         await client.admin.command("ping")
-        logger.info(f"✅ Connected to MongoDB Atlas – database: '{settings.DATABASE_NAME}'")
-
-        # Create indexes
+        logger.info("Connected to MongoDB - database: '%s'", settings.DATABASE_NAME)
         await create_indexes()
     except Exception as e:
-        logger.error(f"❌ MongoDB connection failed: {e}")
-        raise e
+        logger.error("MongoDB connection failed: %s", e)
+        raise
 
 
 async def close_mongo_connection():
-    """Close MongoDB connection on shutdown."""
     global client
     if client:
         client.close()
@@ -36,8 +31,14 @@ async def close_mongo_connection():
 
 async def create_indexes():
     """Create required database indexes."""
-    # Unique email index
+    # One MongoDB profile per Firebase account (partial: ignores legacy docs without a uid)
+    await db.users.create_index(
+        "firebase_uid",
+        unique=True,
+        partialFilterExpression={"firebase_uid": {"$type": "string"}},
+    )
     await db.users.create_index("email", unique=True)
+    await db.users.create_index([("role", 1), ("approval_status", 1)])
     # Index for password reset tokens
     await db.users.create_index("reset_token")
     # Index for refresh tokens

@@ -5,35 +5,34 @@ from typing import List
 class Settings(BaseSettings):
     APP_NAME: str = "SocioSolve-AI"
     DEBUG: bool = True
-    SECRET_KEY: str = "change-me-in-production"
 
-    # MongoDB
+    # MongoDB (MONGODB_URI preferred; MONGODB_URL kept for backward compatibility)
+    MONGODB_URI: str = ""
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "sociosolve"
 
-    # JWT
-    JWT_SECRET_KEY: str = "jwt-secret-change-me"
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    # Firebase Admin SDK (service account JSON stays on the backend only)
+    FIREBASE_PROJECT_ID: str = ""
+    FIREBASE_SERVICE_ACCOUNT_PATH: str = ""
 
-    # CORS
+    # CORS (CORS_ORIGINS preferred; ALLOWED_ORIGINS kept for backward compatibility)
+    CORS_ORIGINS: str = ""
     ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
-    # Email
-    MOCK_EMAIL: bool = True
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    EMAIL_FROM: str = "noreply@sociosolve.ai"
+    # Re-authentication window (seconds) required for sensitive actions like password change
+    RECENT_LOGIN_MAX_AGE: int = 300
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
     @property
+    def mongodb_uri(self) -> str:
+        return self.MONGODB_URI or self.MONGODB_URL
+
+    @property
     def allowed_origins_list(self) -> List[str]:
-        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
+        raw = self.CORS_ORIGINS or self.ALLOWED_ORIGINS
+        return [o.strip() for o in raw.split(",") if o.strip()]
 
     class Config:
         env_file = ".env"

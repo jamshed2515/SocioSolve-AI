@@ -1,217 +1,135 @@
 """
-Authentication service – business logic for register, login, logout,
-token refresh, forgot-password and reset-password.
+Firebase-backed auth service: MongoDB profile synchronisation, logout, password change.
 """
-import secrets
 import logging
-from datetime import datetime, timezone, timedelta
-from bson import ObjectId
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
+from firebase_admin import auth as fb_auth
+from pymongo.errors import DuplicateKeyError
 
 from app.config.database import get_database
-from app.models.user import UserRole, ROLE_DASHBOARD_MAP, new_user_document
-from app.schemas.auth_schema import (
-    RegisterRequest,
-    RegisterResponse,
-    LoginRequest,
-    LoginResponse,
-    UserBasicInfo,
-    TokenRefreshResponse,
-    ForgotPasswordResponse,
-    ResetPasswordRequest,
-    ResetPasswordResponse,
+from app.config.settings import settings
+from app.models.user import (
+    UserRole,
+    REQUESTABLE_ROLES,
+    APPROVAL_REQUIRED_ROLES,
+    new_user_document,
 )
-from app.utils.password_handler import hash_password, verify_password
-from app.utils.jwt_handler import (
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-    get_token_expiry_datetime,
-)
-from app.services.email_service import send_password_reset_email
+from app.schemas.auth_schema import SyncUserRequest, SyncUserResponse
+from app.schemas.profile_schema import user_to_profile
 
 logger = logging.getLogger(__name__)
 
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
-def _user_to_basic_info(user: dict) -> UserBasicInfo:
-    return UserBasicInfo(
-        id=str(user["_id"]),
-        name=user["name"],
-        email=user["email"],
-        role=user["role"],
-        profileImage=user.get("profileImage"),
-        isVerified=user.get("isVerified", False),
-    )
-
-
-# ── Register ─────────────────────────────────────────────────────────────────
-async def register_user(payload: RegisterRequest) -> RegisterResponse:
+async def sync_user(claims: dict, payload: SyncUserRequest) -> SyncUserResponse:
+    """
+    Find-or-create the MongoDB profile for a verified Firebase identity.
+    Idempotent: safe to call after every sign-in and to retry after failures.
+    """
     db = get_database()
+    uid = claims["uid"]
+    email = (claims.get("email") or "").lower().strip()
+    email_verified = bool(claims.get("email_verified", False))
+    now = datetime.now(timezone.utc)
 
-    # Check duplicate email
-    existing = await db.users.find_one({"email": payload.email.lower().strip()})
+    if not email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Firebase account has no email address.")
+
+    # 1. Existing linked profile -> refresh identity fields from the TRUSTED token only
+    user = await db.users.find_one({"firebase_uid": uid})
+    if user:
+        updates = {"email": email, "is_verified": email_verified, "updated_at": now}
+        if not user.get("profile_image") and claims.get("picture"):
+            updates["profile_image"] = claims["picture"]
+        await db.users.update_one({"_id": user["_id"]}, {"$set": updates})
+        user.update(updates)
+        return SyncUserResponse(created=False, user=user_to_profile(user))
+
+    # 2. Legacy / pre-existing profile with the same email but no Firebase link
+    existing = await db.users.find_one({"email": email})
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists.",
+        if existing.get("firebase_uid"):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Email is linked to another account.")
+        if not email_verified:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "An account with this email exists. Verify your email to link it.",
+            )
+        await db.users.update_one(
+            {"_id": existing["_id"]},
+            {
+                "$set": {"firebase_uid": uid, "is_verified": True, "updated_at": now},
+                "$unset": {"password": "", "resetToken": "", "resetTokenExpiry": ""},
+            },
         )
+        linked = await db.users.find_one({"_id": existing["_id"]})
+        return SyncUserResponse(created=False, user=user_to_profile(linked))
 
-    # Build & insert document
-    org = payload.organization.model_dump() if payload.organization else {}
+    # 3. Brand-new profile -> apply trusted role rules
+    role = payload.requestedRole
+    if role is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Profile not found. Choose a role to complete registration.",
+        )
+    if role not in REQUESTABLE_ROLES:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This role cannot be self-assigned.")
+
+    org = payload.organization.model_dump(exclude_none=True) if payload.organization else {}
+    if role in APPROVAL_REQUIRED_ROLES and not org.get("name"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Organization name is required.")
+    if role in APPROVAL_REQUIRED_ROLES:
+        org["type"] = role.value
+
+    name = payload.name or claims.get("name") or email.split("@")[0]
     doc = new_user_document(
-        name=payload.name,
-        email=payload.email,
-        hashed_password=hash_password(payload.password),
-        role=payload.role,
+        firebase_uid=uid,
+        email=email,
+        name=name,
+        role=role,
+        email_verified=email_verified,
         phone=payload.phone,
         organization=org,
+        profile_image=claims.get("picture"),
     )
-    result = await db.users.insert_one(doc)
-    user_id = str(result.inserted_id)
+    try:
+        result = await db.users.insert_one(doc)
+        doc["_id"] = result.inserted_id
+        created = True
+    except DuplicateKeyError:
+        # Concurrent/retried sync created it already -> return that profile, never a duplicate
+        doc = await db.users.find_one({"firebase_uid": uid})
+        if not doc:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered.")
+        created = False
 
-    logger.info(f"New user registered: {payload.email} (role={payload.role})")
-    return RegisterResponse(
-        message="Registration successful! You can now log in.",
-        userId=user_id,
-        role=payload.role,
-        dashboardUrl=ROLE_DASHBOARD_MAP[payload.role],
-    )
-
-
-# ── Login ────────────────────────────────────────────────────────────────────
-async def login_user(payload: LoginRequest) -> LoginResponse:
-    db = get_database()
-
-    user = await db.users.find_one({"email": payload.email.lower().strip()})
-    if not user or not verify_password(payload.password, user["password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
-        )
-
-    if not user.get("isActive", True):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account has been deactivated. Contact support.",
-        )
-
-    user_id = str(user["_id"])
-    token_data = {"sub": user_id, "role": user["role"]}
-
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-
-    # Persist hashed refresh token (we store plain for lookup simplicity;
-    # in production consider hashing the refresh token too)
-    await db.refresh_tokens.insert_one(
-        {
-            "userId": user_id,
-            "token": refresh_token,
-            "expires_at": get_token_expiry_datetime(days=7),
-            "createdAt": datetime.now(timezone.utc),
-        }
-    )
-
-    role = UserRole(user["role"])
-    return LoginResponse(
-        accessToken=access_token,
-        role=role,
-        dashboardUrl=ROLE_DASHBOARD_MAP[role],
-        user=_user_to_basic_info(user),
-    )
+    logger.info("Synced Firebase user %s (role=%s, created=%s)", uid, doc["role"], created)
+    return SyncUserResponse(created=created, user=user_to_profile(doc))
 
 
-# ── Logout ───────────────────────────────────────────────────────────────────
-async def logout_user(refresh_token: str | None, user_id: str) -> dict:
-    db = get_database()
-    if refresh_token:
-        await db.refresh_tokens.delete_one({"token": refresh_token, "userId": user_id})
+async def logout(uid: str) -> dict:
+    """Revoke the user's Firebase refresh tokens (signs out all sessions)."""
+    await run_in_threadpool(fb_auth.revoke_refresh_tokens, uid)
     return {"message": "Logged out successfully."}
 
 
-# ── Refresh token ─────────────────────────────────────────────────────────────
-async def refresh_access_token(refresh_token: str) -> TokenRefreshResponse:
-    db = get_database()
+async def change_password(claims: dict, new_password: str, confirm_password: str) -> dict:
+    if new_password != confirm_password:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Passwords do not match.")
 
-    # Validate JWT structure first
-    payload = decode_token(refresh_token)
-    if payload.get("type") != "refresh":
-        raise HTTPException(status_code=401, detail="Invalid token type.")
+    provider = (claims.get("firebase") or {}).get("sign_in_provider")
+    if provider != "password":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Password change is only available for email/password accounts.",
+        )
 
-    # Check DB record exists (revocation check)
-    record = await db.refresh_tokens.find_one({"token": refresh_token})
-    if not record:
-        raise HTTPException(status_code=401, detail="Refresh token revoked or expired.")
+    auth_time = int(claims.get("auth_time", 0))
+    if datetime.now(timezone.utc).timestamp() - auth_time > settings.RECENT_LOGIN_MAX_AGE:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Recent sign-in required. Re-enter your current password.")
 
-    # Rotate: delete old, issue new
-    await db.refresh_tokens.delete_one({"token": refresh_token})
-    user_id = payload["sub"]
-    role = payload["role"]
-    new_access = create_access_token({"sub": user_id, "role": role})
-    new_refresh = create_refresh_token({"sub": user_id, "role": role})
-
-    await db.refresh_tokens.insert_one(
-        {
-            "userId": user_id,
-            "token": new_refresh,
-            "expires_at": get_token_expiry_datetime(days=7),
-            "createdAt": datetime.now(timezone.utc),
-        }
-    )
-
-    return TokenRefreshResponse(accessToken=new_access)
-
-
-# ── Forgot password ───────────────────────────────────────────────────────────
-async def forgot_password(email: str) -> ForgotPasswordResponse:
-    db = get_database()
-    user = await db.users.find_one({"email": email.lower().strip()})
-
-    # Always return generic message (security: don't reveal email existence)
-    generic = ForgotPasswordResponse(
-        message="If that email exists, a reset link has been sent."
-    )
-
-    if not user:
-        return generic
-
-    reset_token = secrets.token_urlsafe(32)
-    expiry = datetime.now(timezone.utc) + timedelta(hours=1)
-
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {"$set": {"resetToken": reset_token, "resetTokenExpiry": expiry}},
-    )
-
-    await send_password_reset_email(email, reset_token)
-    return generic
-
-
-# ── Reset password ────────────────────────────────────────────────────────────
-async def reset_password(payload: ResetPasswordRequest) -> ResetPasswordResponse:
-    db = get_database()
-
-    user = await db.users.find_one({"resetToken": payload.token})
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
-
-    expiry: datetime = user.get("resetTokenExpiry")
-    if not expiry or datetime.now(timezone.utc) > expiry.replace(tzinfo=timezone.utc):
-        raise HTTPException(status_code=400, detail="Reset token has expired.")
-
-    await db.users.update_one(
-        {"_id": user["_id"]},
-        {
-            "$set": {
-                "password": hash_password(payload.newPassword),
-                "updatedAt": datetime.now(timezone.utc),
-            },
-            "$unset": {"resetToken": "", "resetTokenExpiry": ""},
-        },
-    )
-
-    # Revoke all refresh tokens for security
-    await db.refresh_tokens.delete_many({"userId": str(user["_id"])})
-
-    return ResetPasswordResponse(message="Password reset successful. Please log in.")
+    await run_in_threadpool(fb_auth.update_user, claims["uid"], password=new_password)
+    await run_in_threadpool(fb_auth.revoke_refresh_tokens, claims["uid"])
+    return {"message": "Password changed successfully. Please log in again."}

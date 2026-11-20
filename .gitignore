@@ -15,6 +15,9 @@ build/
 # ── Environment ──────────────────────────────
 .env
 *.env.local
+backend/secrets/
+*service-account*.json
+*-firebase-adminsdk-*.json
 
 # ── Uploads (user files) ──────────────────────
 backend/uploads/

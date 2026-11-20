@@ -1,143 +1,65 @@
 """
-Profile service – handles profile reads, updates and avatar upload.
+Profile service - profile reads, updates and avatar upload.
 """
 import os
 import uuid
-import logging
-import aiofiles
 from datetime import datetime, timezone
-from bson import ObjectId
+
 from fastapi import HTTPException, UploadFile, status
 
 from app.config.database import get_database
+from app.models.user import APPROVAL_REQUIRED_ROLES, UserRole
 from app.schemas.profile_schema import (
-    UserProfileResponse,
     UpdateProfileRequest,
     UpdateProfileResponse,
-    ChangePasswordRequest,
-    ChangePasswordResponse,
     ProfileImageResponse,
+    user_to_profile,
 )
-from app.utils.password_handler import hash_password, verify_password
-
-logger = logging.getLogger(__name__)
 
 AVATAR_DIR = "uploads/avatars"
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
-def _doc_to_profile(user: dict) -> UserProfileResponse:
-    return UserProfileResponse(
-        id=str(user["_id"]),
-        name=user["name"],
-        email=user["email"],
-        role=user["role"],
-        phone=user.get("phone"),
-        profileImage=user.get("profileImage"),
-        skills=user.get("skills", []),
-        interests=user.get("interests", []),
-        organization=user.get("organization"),
-        isVerified=user.get("isVerified", False),
-        isActive=user.get("isActive", True),
-        createdAt=user["createdAt"],
-    )
-
-
-async def _get_user_or_404(user_id: str) -> dict:
+async def update_profile(user: dict, payload: UpdateProfileRequest) -> UpdateProfileResponse:
     db = get_database()
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
-    return user
+    updates: dict = {"updated_at": datetime.now(timezone.utc)}
+    data = payload.model_dump(exclude_unset=True, exclude_none=True)
 
+    for field in ("name", "phone", "skills", "interests"):
+        if field in data:
+            updates[field] = data[field]
 
-# ── Get profile ───────────────────────────────────────────────────────────────
-async def get_profile(user_id: str) -> UserProfileResponse:
-    user = await _get_user_or_404(user_id)
-    return _doc_to_profile(user)
-
-
-# ── Update profile ────────────────────────────────────────────────────────────
-async def update_profile(user_id: str, payload: UpdateProfileRequest) -> UpdateProfileResponse:
-    db = get_database()
-    updates: dict = {"updatedAt": datetime.now(timezone.utc)}
-
-    if payload.name is not None:
-        updates["name"] = payload.name
-    if payload.phone is not None:
-        updates["phone"] = payload.phone
-    if payload.skills is not None:
-        updates["skills"] = payload.skills
-    if payload.interests is not None:
-        updates["interests"] = payload.interests
     if payload.organization is not None:
-        updates["organization"] = payload.organization.model_dump(exclude_none=True)
+        org = payload.organization.model_dump(exclude_none=True)
+        if UserRole(user["role"]) in APPROVAL_REQUIRED_ROLES:
+            org["type"] = user["role"]  # org type is tied to the trusted role
+        updates["organization"] = org
 
-    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": updates})
-    updated_user = await _get_user_or_404(user_id)
-    return UpdateProfileResponse(
-        message="Profile updated successfully.",
-        user=_doc_to_profile(updated_user),
-    )
+    await db.users.update_one({"_id": user["_id"]}, {"$set": updates})
+    updated = await db.users.find_one({"_id": user["_id"]})
+    return UpdateProfileResponse(message="Profile updated successfully.", user=user_to_profile(updated))
 
 
-# ── Change password ───────────────────────────────────────────────────────────
-async def change_password(user_id: str, payload: ChangePasswordRequest) -> ChangePasswordResponse:
+async def upload_profile_image(user: dict, file: UploadFile) -> ProfileImageResponse:
     db = get_database()
-    user = await _get_user_or_404(user_id)
+    ext = ALLOWED_IMAGE_TYPES.get(file.content_type)
+    if not ext:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid file type. Allowed: JPEG, PNG, WebP.")
 
-    if not verify_password(payload.currentPassword, user["password"]):
-        raise HTTPException(status_code=400, detail="Current password is incorrect.")
-
-    if payload.newPassword != payload.confirmPassword:
-        raise HTTPException(status_code=400, detail="New passwords do not match.")
-
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {
-            "$set": {
-                "password": hash_password(payload.newPassword),
-                "updatedAt": datetime.now(timezone.utc),
-            }
-        },
-    )
-
-    # Revoke all refresh tokens after password change
-    await db.refresh_tokens.delete_many({"userId": user_id})
-
-    return ChangePasswordResponse(message="Password changed successfully. Please log in again.")
-
-
-# ── Upload profile image ───────────────────────────────────────────────────────
-async def upload_profile_image(user_id: str, file: UploadFile) -> ProfileImageResponse:
-    db = get_database()
-
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid file type. Allowed: JPEG, PNG, WebP.",
-        )
-
-    contents = await file.read()
+    contents = await file.read(MAX_IMAGE_SIZE + 1)
     if len(contents) > MAX_IMAGE_SIZE:
-        raise HTTPException(status_code=400, detail="File too large. Max size is 5 MB.")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "File too large. Max size is 5 MB.")
 
-    ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "jpg"
-    filename = f"{user_id}_{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join(AVATAR_DIR, filename)
-
+    # Server-generated filename only (never trust the client filename)
+    filename = f"{user['_id']}_{uuid.uuid4().hex}.{ext}"
     os.makedirs(AVATAR_DIR, exist_ok=True)
-    async with aiofiles.open(filepath, "wb") as f:
-        await f.write(contents)
+    with open(os.path.join(AVATAR_DIR, filename), "wb") as f:
+        f.write(contents)
 
     image_url = f"/uploads/avatars/{filename}"
     await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {"profileImage": image_url, "updatedAt": datetime.now(timezone.utc)}},
+        {"_id": user["_id"]},
+        {"$set": {"profile_image": image_url, "updated_at": datetime.now(timezone.utc)}},
     )
-
-    return ProfileImageResponse(
-        message="Profile image updated successfully.",
-        profileImageUrl=image_url,
-    )
+    return ProfileImageResponse(message="Profile image updated successfully.", profileImageUrl=image_url)

@@ -1,35 +1,35 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.requests import Request
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 import logging
 import os
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 from app.config.settings import settings
 from app.config.database import connect_to_mongo, close_mongo_connection
+from app.config.firebase import init_firebase
 from app.routes.auth_routes import router as auth_router
 from app.routes.user_routes import router as user_router
 from app.routes.proposal_routes import router as proposal_router
 from app.modules.team_collaboration.router import router as team_collaboration_router
+from app.routes.admin_routes import router as admin_router
+from app.routes.dashboard_routes import router as dashboard_router
 
-limiter = Limiter(key_func=get_remote_address)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+limiter = Limiter(key_func=get_remote_address)
+os.makedirs("uploads/avatars", exist_ok=True)
 
-# ── Lifespan (startup / shutdown) ──────────────────────────────────────────
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("🚀 Starting SocioSolve-AI backend...")
+    logger.info("Starting SocioSolve-AI backend...")
+    init_firebase()
     await connect_to_mongo()
 
     # Ensure upload directories exist
@@ -37,30 +37,25 @@ async def lifespan(app: FastAPI):
     os.makedirs("uploads/proposals", exist_ok=True)
 
     yield
-
-    logger.info("🛑 Shutting down SocioSolve-AI backend...")
     await close_mongo_connection()
 
 
-# ── App instance ────────────────────────────────────────────────────────────
 app = FastAPI(
     title="SocioSolve-AI API",
     description="Authentication & User Management – Module 1 | Team Formation & Collaboration – Module 3 | Solution Proposals & Evaluation – Module 4",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ── CORS ────────────────────────────────────────────────────────────────────
+# Bearer tokens only (no auth cookies) -> credentials not needed
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # ── Static files (uploaded avatars & proposal documents) ───────────────────
@@ -68,7 +63,6 @@ os.makedirs("uploads/avatars", exist_ok=True)
 os.makedirs("uploads/proposals", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/api/users", tags=["Users"])
 app.include_router(
@@ -86,17 +80,13 @@ app.include_router(
     prefix="/api/proposals",
     tags=["Module 4 - Proposals & Evaluation"],
 )
+app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboards"])
+app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 
 
-# ── Root health check ───────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
 async def root():
-    return {
-        "app": settings.APP_NAME,
-        "status": "running",
-        "version": "1.0.0",
-        "docs": "/docs",
-    }
+    return {"app": settings.APP_NAME, "status": "running", "docs": "/docs"}
 
 
 @app.get("/health", tags=["Health"])

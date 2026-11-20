@@ -1,6 +1,11 @@
 import axios from "axios";
+import { auth } from "../config/firebase";
 
-const RAW_API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+const RAW_API_URL = (
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8000/api"
+).replace(/\/+$/, "");
 export const BACKEND_ORIGIN = RAW_API_URL.endsWith("/api")
   ? RAW_API_URL.slice(0, -4)
   : RAW_API_URL;
@@ -8,83 +13,41 @@ export const API_BASE_URL = `${BACKEND_ORIGIN}/api`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true, // Send cookies (refresh token)
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
 });
 
-// ── Request interceptor: attach access token ──────────────────────────────
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("accessToken");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+// Attach a fresh Firebase ID token (SDK auto-refreshes it before expiry)
+api.interceptors.request.use(async (config) => {
+  const user = auth.currentUser;
+  if (user) {
+    const token = await user.getIdToken();
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-// ── Response interceptor: auto-refresh on 401 ────────────────────────────
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) prom.reject(error);
-    else prom.resolve(token);
-  });
-  failedQueue = [];
-};
-
+// On 401, force-refresh the token once and retry; if it still fails, sign out.
 api.interceptors.response.use(
-  (response) => response,
+  (res) => res,
   async (error) => {
-    const originalRequest = error.config;
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
+    const original = error.config;
+    if (error.response?.status === 401 && original && !original._retry && auth.currentUser) {
+      original._retry = true;
       try {
-        const refreshToken = localStorage.getItem("refreshToken");
-        if (!refreshToken) throw new Error("No refresh token");
-
-        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-          refreshToken,
-        });
-
-        const newToken = data.accessToken;
-        localStorage.setItem("accessToken", newToken);
-        api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
-        processQueue(null, newToken);
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
-      } catch (err) {
-        processQueue(err, null);
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        window.location.href = "/login";
-        return Promise.reject(err);
-      } finally {
-        isRefreshing = false;
+        const token = await auth.currentUser.getIdToken(true);
+        original.headers.Authorization = `Bearer ${token}`;
+        return api(original);
+      } catch {
+        // fall through to sign-out
       }
     }
-
+    if (error.response?.status === 401 && original?._retry) {
+      const { signOut } = await import("firebase/auth");
+      await signOut(auth).catch(() => {});
+    }
     return Promise.reject(error);
   }
 );
 
+export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
 export default api;

@@ -30,6 +30,9 @@ import ReviewQueuePage     from "./pages/proposals/ReviewQueuePage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import RoleRoute      from "./routes/RoleRoute";
 
+// Complete Profile (Google sign-in users)
+import CompleteProfile from "./pages/auth/CompleteProfile";
+
 // 403 page
 import Unauthorized from "./pages/Unauthorized";
 
@@ -72,6 +75,13 @@ export default function App() {
           <Route path="/forgot-password"  element={<ForgotPassword />} />
           <Route path="/reset-password"   element={<ResetPassword />} />
           <Route path="/unauthorized"     element={<Unauthorized />} />
+
+          {/* ── Complete Profile (Google sign-in, no backend profile yet) ── */}
+          <Route path="/complete-profile" element={
+            <ProtectedRoute skipProfileCheck>
+              <CompleteProfile />
+            </ProtectedRoute>
+          } />
 
           {/* ── Protected: Profile (any role) ─────────────── */}
           <Route path="/profile" element={

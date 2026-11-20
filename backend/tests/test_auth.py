@@ -1,0 +1,169 @@
+import pytest
+from fastapi import HTTPException
+from firebase_admin import auth as fb_auth
+
+from app.utils import firebase_token as ft
+from tests.conftest import TOKENS, make_claims, auth
+
+
+def register(client, token, uid, email, role, **body):
+    TOKENS[token] = make_claims(uid, email)
+    return client.post("/api/auth/sync-user", headers=auth(token), json={"requestedRole": role, "name": "Test User", **body})
+
+
+# 1, 2 - self-service roles
+@pytest.mark.parametrize("role", ["citizen", "student"])
+def test_self_service_registration(client, role):
+    r = register(client, "t1", "uid1", f"{role}@x.com", role)
+    assert r.status_code == 200, r.text
+    u = r.json()["user"]
+    assert r.json()["created"] is True
+    assert u["role"] == role and u["approvalStatus"] == "approved"
+    assert u["dashboard"] == f"/dashboard/{role}"
+
+
+# 3, 4 - approval flow
+@pytest.mark.parametrize("role", ["university", "industry"])
+def test_org_registration_requires_approval(client, db, role):
+    assert register(client, "o", "org1", "org@x.com", role).status_code == 422  # org name required
+    r = register(client, "o", "org1", "org@x.com", role, organization={"name": "ACME", "type": "hacked"})
+    u = r.json()["user"]
+    assert u["approvalStatus"] == "pending" and u["organization"]["type"] == role
+    assert client.get(f"/api/dashboard/{role}", headers=auth("o")).status_code == 403
+
+    # admin approves
+    from app.models.user import new_user_document, UserRole
+    import asyncio
+    asyncio.run(db.users.insert_one(new_user_document("adm", "admin@x.com", "Admin", UserRole.ADMIN, True)))
+    TOKENS["a"] = make_claims("adm", "admin@x.com")
+    r = client.put(f"/api/admin/users/{u['id']}/approval", headers=auth("a"), json={"approve": True})
+    assert r.status_code == 200 and r.json()["approvalStatus"] == "approved"
+    assert client.get(f"/api/dashboard/{role}", headers=auth("o")).status_code == 200
+
+
+# 5 - Google sign-in (new user must pick role, then idempotent re-sync)
+def test_google_signin_flow(client, db):
+    TOKENS["g"] = make_claims("guid", "g@gmail.com", provider="google.com", name="G User", picture="http://p")
+    assert client.post("/api/auth/sync-user", headers=auth("g")).status_code == 422
+    r = client.post("/api/auth/sync-user", headers=auth("g"), json={"requestedRole": "student"})
+    assert r.json()["user"]["name"] == "G User" and r.json()["user"]["profileImage"] == "http://p"
+    r2 = client.post("/api/auth/sync-user", headers=auth("g"), json={"requestedRole": "citizen"})
+    assert r2.json()["created"] is False and r2.json()["user"]["role"] == "student"  # role not changeable
+    assert len(db.users.docs) == 1  # no duplicates
+
+
+# 6, 9 - login / persistence: /me works with token
+def test_login_me(client):
+    register(client, "t", "u", "a@x.com", "citizen")
+    r = client.get("/api/auth/me", headers=auth("t"))
+    assert r.status_code == 200 and r.json()["email"] == "a@x.com"
+    assert "password" not in r.json()
+
+
+# 8 - logout
+def test_logout(client, monkeypatch):
+    called = {}
+    monkeypatch.setattr(fb_auth, "revoke_refresh_tokens", lambda uid: called.setdefault("uid", uid))
+    register(client, "t", "u", "a@x.com", "citizen")
+    assert client.post("/api/auth/logout", headers=auth("t")).status_code == 200
+    assert called["uid"] == "u"
+
+
+# 10, 11 - invalid / expired / revoked / missing
+@pytest.mark.parametrize("token", ["garbage", "expired", "revoked"])
+def test_bad_tokens(client, token):
+    assert client.get("/api/auth/me", headers=auth(token)).status_code == 401
+
+
+def test_missing_token(client):
+    assert client.get("/api/auth/me").status_code == 401
+
+
+def test_real_verifier_maps_firebase_errors(monkeypatch):
+    for exc, code in [
+        (fb_auth.ExpiredIdTokenError("x", None), 401),
+        (fb_auth.RevokedIdTokenError("x"), 401),
+        (fb_auth.InvalidIdTokenError("x"), 401),
+        (fb_auth.UserDisabledError("x"), 403),
+    ]:
+        def boom(*a, _e=exc, **k):
+            raise _e
+        monkeypatch.setattr(fb_auth, "verify_id_token", boom)
+        with pytest.raises(HTTPException) as ei:
+            ft.verify_firebase_token("tok")
+        assert ei.value.status_code == code
+
+
+def test_verifier_checks_revocation(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(fb_auth, "verify_id_token", lambda t, **k: seen.update(k) or {"uid": "u"})
+    ft.verify_firebase_token("tok")
+    assert seen["check_revoked"] is True
+
+
+# 12 - wrong-role dashboard
+def test_unauthorized_dashboard(client):
+    register(client, "t", "u", "a@x.com", "student")
+    assert client.get("/api/dashboard/student", headers=auth("t")).status_code == 200
+    for other in ["citizen", "university", "industry", "admin"]:
+        assert client.get(f"/api/dashboard/{other}", headers=auth("t")).status_code == 403
+
+
+# 13 - admin cannot be self-assigned / escalated
+def test_admin_privilege_protection(client):
+    r = register(client, "t", "u", "a@x.com", "admin")
+    assert r.status_code == 403
+    register(client, "t", "u", "a@x.com", "citizen")
+    r = client.put("/api/users/profile", headers=auth("t"), json={"name": "Hacker", "role": "admin", "is_active": True})
+    assert r.status_code == 200 and r.json()["user"]["role"] == "citizen"
+    assert client.get("/api/admin/users/pending", headers=auth("t")).status_code == 403
+
+
+# 14 - profile update
+def test_profile_update(client):
+    register(client, "t", "u", "a@x.com", "student")
+    r = client.put("/api/users/profile", headers=auth("t"),
+                   json={"name": "New Name", "skills": ["Python", " python ", "Python"], "interests": ["AI"]})
+    assert r.status_code == 200
+    u = client.get("/api/users/profile", headers=auth("t")).json()
+    assert u["name"] == "New Name" and u["skills"] == ["Python", "python"] and u["interests"] == ["AI"]
+
+
+def test_change_password_rules(client):
+    register(client, "t", "u", "a@x.com", "student")
+    ok = {"newPassword": "NewPass123", "confirmPassword": "NewPass123"}
+    assert client.put("/api/users/change-password", headers=auth("t"), json=ok).status_code == 200
+    TOKENS["old"] = make_claims("u", "a@x.com", auth_time=1)
+    assert client.put("/api/users/change-password", headers=auth("old"), json=ok).status_code == 401
+    TOKENS["goog"] = make_claims("u", "a@x.com", provider="google.com")
+    assert client.put("/api/users/change-password", headers=auth("goog"), json=ok).status_code == 400
+
+
+# 15 - inactive user rejected
+def test_inactive_user_rejected(client, db):
+    register(client, "t", "u", "a@x.com", "citizen")
+    db.users.docs[0]["is_active"] = False
+    assert client.get("/api/auth/me", headers=auth("t")).status_code == 403
+    assert client.get("/api/users/profile", headers=auth("t")).status_code == 403
+
+
+# Sync retry: Firebase account exists but first Mongo write failed
+def test_sync_retry_after_db_failure(client, db, monkeypatch):
+    TOKENS["t"] = make_claims("u", "a@x.com")
+    orig = db.users.insert_one
+
+    async def fail(doc):
+        raise RuntimeError("Atlas down")
+    monkeypatch.setattr(db.users, "insert_one", fail)
+    with pytest.raises(RuntimeError):
+        client.post("/api/auth/sync-user", headers=auth("t"), json={"requestedRole": "citizen"})
+    monkeypatch.setattr(db.users, "insert_one", orig)
+    r = client.post("/api/auth/sync-user", headers=auth("t"), json={"requestedRole": "citizen"})
+    assert r.status_code == 200 and len(db.users.docs) == 1
+
+
+def test_unverified_email_cannot_hijack_legacy_profile(client, db):
+    import asyncio
+    asyncio.run(db.users.insert_one({"email": "old@x.com", "role": "citizen", "name": "Old"}))
+    TOKENS["t"] = make_claims("new", "old@x.com", verified=False)
+    assert client.post("/api/auth/sync-user", headers=auth("t"), json={"requestedRole": "citizen"}).status_code == 409

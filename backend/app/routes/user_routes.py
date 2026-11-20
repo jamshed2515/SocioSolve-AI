@@ -1,9 +1,9 @@
 """
-User / Profile routes – /api/users/*
-All routes require authentication.
+User / Profile routes - /api/users/*  (all require a verified Firebase token)
 """
 from fastapi import APIRouter, Depends, UploadFile, File
 
+from app.middleware.auth_middleware import require_active_user
 from app.schemas.profile_schema import (
     UserProfileResponse,
     UpdateProfileRequest,
@@ -11,45 +11,32 @@ from app.schemas.profile_schema import (
     ChangePasswordRequest,
     ChangePasswordResponse,
     ProfileImageResponse,
+    user_to_profile,
 )
-from app.services import profile_service
-from app.middleware.auth_middleware import get_current_user
+from app.services import auth_service, profile_service
 
 router = APIRouter()
 
 
-# ── GET /api/users/profile ────────────────────────────────────────────────────
 @router.get("/profile", response_model=UserProfileResponse)
-async def get_profile(current_user: dict = Depends(get_current_user)):
-    """Get the authenticated user's full profile."""
-    return await profile_service.get_profile(str(current_user["_id"]))
+async def get_profile(current_user: dict = Depends(require_active_user)):
+    return user_to_profile(current_user)
 
 
-# ── PUT /api/users/profile ────────────────────────────────────────────────────
 @router.put("/profile", response_model=UpdateProfileResponse)
-async def update_profile(
-    payload: UpdateProfileRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    """Update profile fields (name, phone, skills, interests, organization)."""
-    return await profile_service.update_profile(str(current_user["_id"]), payload)
+async def update_profile(payload: UpdateProfileRequest, current_user: dict = Depends(require_active_user)):
+    """Update name, phone, skills, interests, organization. Role/status cannot be changed here."""
+    return await profile_service.update_profile(current_user, payload)
 
 
-# ── PUT /api/users/change-password ───────────────────────────────────────────
 @router.put("/change-password", response_model=ChangePasswordResponse)
-async def change_password(
-    payload: ChangePasswordRequest,
-    current_user: dict = Depends(get_current_user),
-):
-    """Change the authenticated user's password."""
-    return await profile_service.change_password(str(current_user["_id"]), payload)
+async def change_password(payload: ChangePasswordRequest, current_user: dict = Depends(require_active_user)):
+    """Change the Firebase password. Requires a sign-in within the last few minutes."""
+    return await auth_service.change_password(
+        current_user["_claims"], payload.newPassword, payload.confirmPassword
+    )
 
 
-# ── PUT /api/users/profile-image ─────────────────────────────────────────────
 @router.put("/profile-image", response_model=ProfileImageResponse)
-async def update_profile_image(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
-):
-    """Upload a new profile avatar (JPEG/PNG/WebP, max 5 MB)."""
-    return await profile_service.upload_profile_image(str(current_user["_id"]), file)
+async def update_profile_image(file: UploadFile = File(...), current_user: dict = Depends(require_active_user)):
+    return await profile_service.upload_profile_image(current_user, file)
