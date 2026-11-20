@@ -8,7 +8,7 @@ import {
   Trash2,
   RotateCcw,
   ExternalLink,
-  GitBranch as Github,
+  GitBranch,
   Globe,
   FileText,
   Users,
@@ -578,7 +578,7 @@ export default function ProposalDetailsPage() {
                     className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <Github size={18} className="text-white shrink-0" />
+                      <GitBranch size={18} className="text-white shrink-0" />
                       <div className="truncate">
                         <p className="text-xs font-semibold text-white">GitHub Source Repository</p>
                         <p className="text-xs text-primary-300 truncate">{proposal.githubUrl}</p>
