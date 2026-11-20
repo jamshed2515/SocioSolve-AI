@@ -14,6 +14,7 @@ from app.config.settings import settings
 from app.config.database import connect_to_mongo, close_mongo_connection
 from app.routes.auth_routes import router as auth_router
 from app.routes.user_routes import router as user_router
+from app.modules.team_collaboration.router import router as team_collaboration_router
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -61,11 +62,17 @@ app.add_middleware(
 )
 
 # ── Static files (uploaded avatars) ────────────────────────────────────────
+os.makedirs("uploads/avatars", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # ── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/api/users", tags=["Users"])
+app.include_router(
+    team_collaboration_router,
+    prefix="/api/team-collaboration",
+    tags=["Module 3 – Team Collaboration"],
+)
 
 
 # ── Root health check ───────────────────────────────────────────────────────

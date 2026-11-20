@@ -26,6 +26,16 @@ import RoleRoute      from "./routes/RoleRoute";
 // 403 page
 import Unauthorized from "./pages/Unauthorized";
 
+// Module 3 – Team Formation & Collaboration
+import TeamCollaborationLayout from "./modules/team-collaboration/components/TeamCollaborationLayout";
+import TeamDashboard           from "./modules/team-collaboration/pages/TeamDashboard";
+import MyTeams                 from "./modules/team-collaboration/pages/MyTeams";
+import ExploreTeams            from "./modules/team-collaboration/pages/ExploreTeams";
+import TeamInvitations         from "./modules/team-collaboration/pages/TeamInvitations";
+import TeamDiscussion          from "./modules/team-collaboration/pages/TeamDiscussion";
+import TeamTasks               from "./modules/team-collaboration/pages/TeamTasks";
+import TeamMeetings            from "./modules/team-collaboration/pages/TeamMeetings";
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -88,6 +98,17 @@ export default function App() {
               <RoleRoute role="admin"><AdminDashboard /></RoleRoute>
             </ProtectedRoute>
           } />
+
+          {/* ── Module 3: Team Formation & Collaboration ───── */}
+          <Route path="/teams" element={<TeamCollaborationLayout />}>
+            <Route index element={<TeamDashboard />} />
+            <Route path="my-teams"    element={<MyTeams />} />
+            <Route path="explore"     element={<ExploreTeams />} />
+            <Route path="invitations" element={<TeamInvitations />} />
+            <Route path="discussions" element={<TeamDiscussion />} />
+            <Route path="tasks"       element={<TeamTasks />} />
+            <Route path="meetings"    element={<TeamMeetings />} />
+          </Route>
 
           {/* ── 404 fallback ───────────────────────────────── */}
           <Route path="*" element={<Navigate to="/login" replace />} />

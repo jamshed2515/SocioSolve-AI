@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
   LayoutDashboard, User, LogOut, Menu, X, Zap,
-  Bell, ChevronDown,
+  Bell, ChevronDown, Users,
 } from "lucide-react";
 
 const NAV_ITEMS = {
@@ -83,6 +83,14 @@ export default function DashboardLayout({ children, title }) {
               {label}
             </Link>
           ))}
+          <Link to="/teams"
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
+              ${location.pathname.startsWith("/teams")
+                ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
+                : "text-white/50 hover:text-white hover:bg-white/5"}`}>
+            <Users size={18} />
+            Team Collaboration
+          </Link>
           <Link to="/profile"
             className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
               ${location.pathname === "/profile"
