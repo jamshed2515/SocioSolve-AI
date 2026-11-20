@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Cloudinary (media uploads - secret stays on backend only)
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_URL: str = ""
+
     @property
     def mongodb_uri(self) -> str:
         return self.MONGODB_URI or self.MONGODB_URL
