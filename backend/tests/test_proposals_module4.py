@@ -152,8 +152,14 @@ class FakeDatabase:
         self.proposals = InMemoryCollection()
         self.proposal_reviews = InMemoryCollection()
         self.proposal_status_history = InMemoryCollection()
+        self.proposal_review_history = InMemoryCollection()
         self.notifications = InMemoryCollection()
         self.teams = InMemoryCollection()
+
+    def __getattr__(self, name):
+        col = InMemoryCollection()
+        setattr(self, name, col)
+        return col
 
 
 async def run_all_module4_tests():
@@ -262,7 +268,7 @@ async def run_all_module4_tests():
 
     # 7. Verify Self-Review & Unauthorized Role Review Prevention
     sample_criteria = [
-        CriterionScoreSchema(key=c["key"], label=c["label"], score=9, maxScore=10, comment="Strong")
+        CriterionScoreSchema(key=c["key"], label=c["label"], score=18, maxScore=20, comment="Strong")
         for c in DEFAULT_RUBRIC_CRITERIA
     ]
     try:
@@ -297,7 +303,7 @@ async def run_all_module4_tests():
     except HTTPException as exc:
         assert exc.status_code == 403
 
-    # 8. Authorized Reviewer submits official evaluation -> auto-calculates score & moves to 'under_review'
+    # 8. Authorized Reviewer submits official evaluation -> auto-calculates score out of 100 & moves to 'under_review'
     review_res = await proposal_service.upsert_review(
         proposal_id,
         ReviewUpsertRequest(
@@ -308,12 +314,34 @@ async def run_all_module4_tests():
         ),
         reviewer_user,
     )
-    assert review_res["review"]["totalScore"] == 45.0
-    assert review_res["review"]["averageScore"] == 9.0
-    assert review_res["reviewSummary"]["totalScore"] == 45.0
+    assert review_res["review"]["totalScore"] == 90.0
+    assert review_res["review"]["maxTotalScore"] == 100.0
+    assert review_res["review"]["averageScore"] == 18.0
+    assert review_res["reviewSummary"]["totalScore"] == 90.0
+    assert review_res["reviewSummary"]["maxTotalScore"] == 100.0
 
     detail_after_review = await proposal_service.get_proposal_by_id(proposal_id, student_user)
     assert detail_after_review["status"] == ProposalStatus.UNDER_REVIEW.value
+    assert len(detail_after_review["reviewHistory"]) == 1
+
+    # Review history preservation: submitting an updated review appends to reviewHistory without overwriting
+    updated_criteria = [
+        CriterionScoreSchema(key=c["key"], label=c["label"], score=19, maxScore=20, comment="Outstanding")
+        for c in DEFAULT_RUBRIC_CRITERIA
+    ]
+    await proposal_service.upsert_review(
+        proposal_id,
+        ReviewUpsertRequest(
+            criteriaScores=updated_criteria,
+            overallFeedback="Updated review after prototype demonstration.",
+            recommendation=ReviewRecommendation.ACCEPT,
+            submitFinal=True,
+        ),
+        reviewer_user,
+    )
+    detail_revised = await proposal_service.get_proposal_by_id(proposal_id, student_user)
+    assert len(detail_revised["reviewHistory"]) == 2
+    assert detail_revised["reviewSummary"]["totalScore"] == 95.0
 
     # 9. Finalize decision -> Under Review to Accepted
     accepted_detail = await proposal_service.transition_proposal_status(
@@ -327,6 +355,17 @@ async def run_all_module4_tests():
     assert accepted_detail["status"] == ProposalStatus.ACCEPTED.value
     assert len(accepted_detail["statusHistory"]) == 4  # draft -> submitted -> under_review -> accepted
 
+    # 10. Verify that editing after final acceptance is strictly blocked
+    try:
+        await proposal_service.update_proposal(
+            proposal_id,
+            ProposalUpdateRequest(title="Editing after accepted should fail"),
+            student_user,
+        )
+        assert False, "Accepted proposal must not be editable"
+    except HTTPException as exc:
+        assert exc.status_code == 400
+
     # 10. Dashboard stats & search verification
     stats = await proposal_service.get_dashboard_stats(student_user)
     assert stats["totalProposals"] == 1
@@ -335,12 +374,163 @@ async def run_all_module4_tests():
     search_res = await proposal_service.list_proposals(student_user, search="HydroSense")
     assert search_res["total"] == 1
 
-    print("✅ All Module 4 automated tests passed successfully!")
+    # 11. Test Proposal Withdrawal and Resubmission Flow
+    withdrawn_prop = await proposal_service.create_proposal(
+        ProposalCreateRequest(
+            title="Clean Rivers Autonomous Drone Network",
+            challengeId=pub_challenge_id,
+            problemUnderstanding="Chemical run-off and municipal discharge into rivers.",
+            proposedSolution="Autonomous solar drone boat with water sampling and optical turbidity sensors.",
+            innovationUniqueness="Swarm communication between 4 micro-surface drones.",
+            technicalApproach="ROS 2, ArduPilot, LoRa transceiver, OpenCV water debris analysis.",
+            implementationPlan="Phase 1: 3-month prototype. Phase 2: Pilot run in Sabarmati river.",
+            requiredResources="Boat hull materials, telemetry radios, river safety permits.",
+            expectedImpact="Track pollution hotspots across 40 km of river corridor.",
+            estimatedTimeline="16 Weeks",
+            submitImmediately=True,
+        ),
+        student_user,
+    )
+    assert withdrawn_prop["status"] == ProposalStatus.SUBMITTED.value
+
+    # Author withdraws proposal to adjust specs
+    withdrawn = await proposal_service.withdraw_proposal(
+        withdrawn_prop["id"],
+        "Need to revise sensor specifications with research mentor.",
+        student_user,
+    )
+    assert withdrawn["status"] == ProposalStatus.WITHDRAWN.value
+
+    # Author can edit the withdrawn proposal
+    revised_withdrawn = await proposal_service.update_proposal(
+        withdrawn_prop["id"],
+        ProposalUpdateRequest(estimatedTimeline="20 Weeks"),
+        student_user,
+    )
+    assert revised_withdrawn["estimatedTimeline"] == "20 Weeks"
+
+    # Author can resubmit the withdrawn proposal
+    resubmitted = await proposal_service.submit_draft_proposal(withdrawn_prop["id"], student_user)
+    assert resubmitted["status"] == ProposalStatus.SUBMITTED.value
+
+    print("✅ All Module 4 service-level tests passed successfully!")
 
 
 def test_module4_workflow():
     asyncio.run(run_all_module4_tests())
 
 
+def test_module4_fastapi_client():
+    """Verify FastAPI routes: /review, PATCH /status, /review-history, /rubric-criteria."""
+    from fastapi.testclient import TestClient
+    from app.config import database as db_config
+    from app.main import app
+    from app.middleware.auth_middleware import get_current_user
+
+    fake_db = FakeDatabase()
+    proposal_service.get_database = lambda: fake_db
+    db_config.get_database = lambda: fake_db
+
+    student_id = ObjectId()
+    reviewer_id = ObjectId()
+
+    mock_student = {
+        "_id": student_id,
+        "name": "Aakash Gupta",
+        "email": "aakash@university.edu",
+        "role": "student",
+        "approval_status": "approved",
+        "is_active": True,
+    }
+    mock_reviewer = {
+        "_id": reviewer_id,
+        "name": "Prof. R. Sengupta",
+        "email": "sengupta@iit.ac.in",
+        "role": "university",
+        "approval_status": "approved",
+        "is_active": True,
+    }
+
+    current_test_user = [mock_student]
+
+    async def override_get_current_user():
+        return current_test_user[0]
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    client = TestClient(app)
+
+    # 1. Rubric criteria endpoint returns max score of 100
+    res = client.get("/api/proposals/rubric-criteria")
+    assert res.status_code == 200, res.text
+    rubric_data = res.json()
+    assert rubric_data["maxTotalScore"] == 100
+    assert len(rubric_data["criteria"]) == 5
+
+    # 2. Get published challenges
+    res = client.get("/api/proposals/challenges/published")
+    assert res.status_code == 200
+    challenges = res.json()["challenges"]
+    assert len(challenges) >= 1
+    challenge_id = challenges[0]["id"]
+
+    # 3. Create Proposal via POST /api/proposals
+    create_payload = {
+        "title": "Smart Solar Cold Storage for Farmers",
+        "challengeId": challenge_id,
+        "problemUnderstanding": "Post-harvest crop spoilage due to lack of decentralized cold storage.",
+        "proposedSolution": "Phase-change material thermal battery cold rooms for farmer producer organizations.",
+        "innovationUniqueness": "Zero chemical refrigerant thermal storage with 72-hour autonomy.",
+        "technicalApproach": "IoT temperature nodes, variable frequency drive compressor, MQTT monitoring.",
+        "implementationPlan": "Deploy 2 pilot containers in cooperative mandis over 14 weeks.",
+        "requiredResources": "Food science lab partnership, cold room insulation panels.",
+        "expectedImpact": "Reduce fruit/vegetable wastage by 45% for 120 smallholder farming families.",
+        "estimatedTimeline": "14 Weeks",
+        "submitImmediately": True,
+    }
+    res = client.post("/api/proposals", json=create_payload)
+    assert res.status_code == 201, res.text
+    prop_data = res.json()
+    proposal_id = prop_data["id"]
+    assert prop_data["status"] == "submitted"
+
+    # 4. Switch to Reviewer & submit evaluation via POST /api/proposals/{id}/review (singular alias)
+    current_test_user[0] = mock_reviewer
+    review_payload = {
+        "criteriaScores": [
+            {"key": c["key"], "label": c["label"], "score": 19, "maxScore": 20, "comment": "Exemplary"}
+            for c in rubric_data["criteria"]
+        ],
+        "overallFeedback": "Thoroughly planned post-harvest refrigeration architecture with high societal impact.",
+        "recommendation": "accept",
+        "submitFinal": True,
+    }
+    res = client.post(f"/api/proposals/{proposal_id}/review", json=review_payload)
+    assert res.status_code == 200, res.text
+    review_res = res.json()
+    assert review_res["review"]["totalScore"] == 95.0
+    assert review_res["review"]["maxTotalScore"] == 100.0
+
+    # 5. Fetch review history via GET /api/proposals/{id}/review-history
+    res = client.get(f"/api/proposals/{proposal_id}/review-history")
+    assert res.status_code == 200
+    rev_hist_data = res.json()
+    assert len(rev_hist_data["reviewHistory"]) >= 1
+
+    # 6. Update status via PATCH /api/proposals/{id}/status (patch alias)
+    patch_payload = {
+        "toStatus": "accepted",
+        "comment": "Formally accepted for incubation support and grant funding.",
+    }
+    res = client.patch(f"/api/proposals/{proposal_id}/status", json=patch_payload)
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "accepted"
+
+    # Reset overrides
+    app.dependency_overrides.clear()
+    print("✅ All FastAPI client endpoint tests passed successfully!")
+
+
 if __name__ == "__main__":
     test_module4_workflow()
+    test_module4_fastapi_client()

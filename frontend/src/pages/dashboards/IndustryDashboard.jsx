@@ -1,6 +1,7 @@
+import { Link } from "react-router-dom";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
-import { Briefcase, HandshakeIcon, DollarSign, Star, ArrowRight, UserCheck, Clock, XCircle } from "lucide-react";
+import { Briefcase, HandshakeIcon, DollarSign, Star, ArrowRight, UserCheck, Clock, XCircle, ClipboardCheck } from "lucide-react";
 
 const stats = [
   { label: "Active Mentorships",  value: "9",    icon: UserCheck,     color: "text-emerald-400", bg: "bg-emerald-500/10" },
@@ -62,9 +63,14 @@ export default function IndustryDashboard() {
             <h2 className="text-lg font-semibold text-white">Industry Partner Hub 🏢</h2>
             <p className="text-white/50 text-sm">Mentor students, fund projects & build partnerships.</p>
           </div>
-          <button id="industry-offer-btn" className="ml-auto btn-primary text-sm">
-            Post Opportunity <ArrowRight size={16} />
-          </button>
+          <div className="ml-auto flex items-center gap-3">
+            <Link to="/proposals" className="btn-ghost text-sm">
+              Proposals Hub
+            </Link>
+            <Link to="/proposals/review-queue" id="industry-review-queue-btn" className="btn-primary text-sm bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20">
+              <ClipboardCheck size={16} /> Review Queue
+            </Link>
+          </div>
         </div>
       </div>
 

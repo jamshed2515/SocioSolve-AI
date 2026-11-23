@@ -20,6 +20,7 @@ from app.models.proposal import (
     DEFAULT_RUBRIC_CRITERIA,
     new_proposal_document,
     new_review_document,
+    new_review_history_document,
     new_status_history_document,
 )
 from app.schemas.proposal_schema import (
@@ -118,11 +119,13 @@ async def _create_notification(
         logger.warning(f"Notification insert warning: {exc}")
 
 
-async def ensure_seed_challenges(db) -> List[dict]:
+async def ensure_seed_challenges(db=None) -> List[dict]:
     """
     Ensure published societal challenges exist in `db.challenges` so Module 4 works
     seamlessly even before Module 2 is merged. Does not overwrite existing challenges.
     """
+    if db is None:
+        db = get_database()
     count = await db.challenges.count_documents({})
     if count == 0:
         now = datetime.now(timezone.utc)
@@ -235,6 +238,18 @@ async def ensure_seed_challenges(db) -> List[dict]:
     ).sort("createdAt", -1)
     docs = await cursor.to_list(length=100)
     return [_serialize_doc(d) for d in docs]
+
+
+async def get_user_teams(current_user: dict, db=None) -> dict:
+    """Fetch user's teams from Module 3 teams collection if available."""
+    if db is None:
+        db = get_database()
+    uid = str(current_user["_id"])
+    cursor = db.teams.find(
+        {"$or": [{"leaderId": uid}, {"leader_id": uid}, {"members.userId": uid}, {"memberIds": uid}]}
+    ).limit(25)
+    docs = await cursor.to_list(length=25)
+    return {"teams": [_serialize_doc(t) for t in docs]}
 
 
 async def get_published_challenge_or_400(db, challenge_id: str) -> dict:
@@ -412,10 +427,10 @@ async def update_proposal(proposal_id: str, data: ProposalUpdateRequest, current
             detail="You do not have permission to edit this proposal.",
         )
 
-    if proposal.get("status") != ProposalStatus.DRAFT.value:
+    if proposal.get("status") not in {ProposalStatus.DRAFT.value, ProposalStatus.WITHDRAWN.value}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Proposals with status '{proposal.get('status')}' cannot be edited. Only draft proposals are editable.",
+            detail=f"Proposals with status '{proposal.get('status')}' cannot be edited. Only draft or withdrawn proposals can be edited.",
         )
 
     updates: Dict[str, Any] = {}
@@ -506,10 +521,10 @@ async def submit_draft_proposal(proposal_id: str, current_user: dict) -> dict:
         )
 
     current_status = proposal.get("status")
-    if current_status != ProposalStatus.DRAFT.value:
+    if current_status not in {ProposalStatus.DRAFT.value, ProposalStatus.WITHDRAWN.value}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot submit a proposal that is currently '{current_status}'. Only drafts can be submitted.",
+            detail=f"Cannot submit a proposal that is currently '{current_status}'. Only draft or withdrawn proposals can be submitted.",
         )
 
     # Verify the challenge is still published
@@ -532,7 +547,7 @@ async def submit_draft_proposal(proposal_id: str, current_user: dict) -> dict:
 
     history_entry = new_status_history_document(
         proposal_id=proposal_id,
-        from_status=ProposalStatus.DRAFT.value,
+        from_status=current_status,
         to_status=ProposalStatus.SUBMITTED.value,
         changed_by_id=str(current_user["_id"]),
         changed_by_name=current_user.get("name", "User"),
@@ -650,15 +665,20 @@ async def get_proposal_by_id(proposal_id: str, current_user: dict) -> dict:
     reviews_cursor = db.proposal_reviews.find(review_query).sort("updatedAt", -1)
     review_docs = await reviews_cursor.to_list(length=50)
 
+    # Fetch immutable review history audit trail
+    rev_history_cursor = db.proposal_review_history.find({"proposalId": proposal_id}).sort("timestamp", 1)
+    rev_history_docs = await rev_history_cursor.to_list(length=100)
+
     serialized = _serialize_doc(proposal)
     serialized["statusHistory"] = [_serialize_doc(h) for h in history_docs]
     serialized["reviews"] = [_serialize_doc(r) for r in review_docs]
+    serialized["reviewHistory"] = [_serialize_doc(rh) for rh in rev_history_docs]
     serialized["permissions"] = {
         "isOwner": is_owner,
-        "canEdit": is_owner and proposal.get("status") == ProposalStatus.DRAFT.value,
+        "canEdit": is_owner and proposal.get("status") in {ProposalStatus.DRAFT.value, ProposalStatus.WITHDRAWN.value},
         "canDelete": str(proposal.get("authorId")) == str(current_user["_id"])
         and proposal.get("status") == ProposalStatus.DRAFT.value,
-        "canSubmit": is_owner and proposal.get("status") == ProposalStatus.DRAFT.value,
+        "canSubmit": is_owner and proposal.get("status") in {ProposalStatus.DRAFT.value, ProposalStatus.WITHDRAWN.value},
         "canWithdraw": str(proposal.get("authorId")) == str(current_user["_id"])
         and proposal.get("status") == ProposalStatus.SUBMITTED.value,
         "canReview": _can_review_proposal(proposal, current_user)
@@ -901,7 +921,7 @@ async def _recompute_proposal_review_summary(db, proposal_id: str):
         summary = {
             "reviewCount": 0,
             "totalScore": 0.0,
-            "maxTotalScore": 50.0,
+            "maxTotalScore": 100.0,
             "averageScore": 0.0,
             "percentageScore": 0.0,
             "latestFeedback": existing_summary.get("latestFeedback"),
@@ -914,7 +934,7 @@ async def _recompute_proposal_review_summary(db, proposal_id: str):
         count = len(submitted_reviews)
         avg_total = round(sum(r.get("totalScore", 0.0) for r in submitted_reviews) / count, 2)
         avg_criterion = round(sum(r.get("averageScore", 0.0) for r in submitted_reviews) / count, 2)
-        max_total = submitted_reviews[0].get("maxTotalScore", 50.0)
+        max_total = submitted_reviews[0].get("maxTotalScore", 100.0)
         pct = round((avg_total / max_total) * 100, 1) if max_total else 0.0
         latest = submitted_reviews[0]
         summary = {
@@ -1005,6 +1025,28 @@ async def upsert_review(
     else:
         ins = await db.proposal_reviews.insert_one(review_doc)
         saved_review = await db.proposal_reviews.find_one({"_id": ins.inserted_id})
+
+    # Record immutable review history log entry
+    action_type = "evaluation_submitted" if target_review_status == ReviewStatus.SUBMITTED else "draft_saved"
+    if existing and existing.get("status") == ReviewStatus.SUBMITTED.value:
+        action_type = "evaluation_updated"
+
+    history_log = new_review_history_document(
+        proposal_id=proposal_id,
+        review_id=str(saved_review["_id"]),
+        reviewer_id=reviewer_id,
+        reviewer_name=current_user.get("name", "Reviewer"),
+        reviewer_role=current_user.get("role", "reviewer"),
+        criteria_scores=criteria_list,
+        total_score=review_doc["totalScore"],
+        max_total_score=review_doc["maxTotalScore"],
+        average_score=review_doc["averageScore"],
+        percentage_score=review_doc["percentageScore"],
+        overall_feedback=data.overallFeedback,
+        recommendation=data.recommendation.value,
+        action=action_type,
+    )
+    await db.proposal_review_history.insert_one(history_log)
 
     # Automatically transition proposal from 'submitted' -> 'under_review' when review starts/submits
     if prop_status == ProposalStatus.SUBMITTED.value:

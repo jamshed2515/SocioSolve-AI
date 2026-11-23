@@ -1,6 +1,7 @@
+import { Link } from "react-router-dom";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
-import { Building2, Users, FlaskConical, Award, FileText, ArrowRight, Clock, XCircle } from "lucide-react";
+import { Building2, Users, FlaskConical, Award, FileText, ArrowRight, Clock, XCircle, ClipboardCheck } from "lucide-react";
 
 const stats = [
   { label: "Active Students",    value: "248", icon: Users,       color: "text-amber-400",   bg: "bg-amber-500/10" },
@@ -62,9 +63,14 @@ export default function UniversityDashboard() {
             <h2 className="text-lg font-semibold text-white">University Portal 🏛️</h2>
             <p className="text-white/50 text-sm">Manage institutional projects, students & research.</p>
           </div>
-          <button id="uni-add-project-btn" className="ml-auto btn-primary text-sm">
-            Add Project <ArrowRight size={16} />
-          </button>
+          <div className="ml-auto flex items-center gap-3">
+            <Link to="/proposals" className="btn-ghost text-sm">
+              Proposals Hub
+            </Link>
+            <Link to="/proposals/review-queue" id="uni-review-queue-btn" className="btn-primary text-sm bg-amber-500 hover:bg-amber-600 shadow-amber-500/20">
+              <ClipboardCheck size={16} /> Review Queue
+            </Link>
+          </div>
         </div>
       </div>
 
