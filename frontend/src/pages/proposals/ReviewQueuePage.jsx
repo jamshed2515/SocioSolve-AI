@@ -230,7 +230,7 @@ export default function ReviewQueuePage() {
         ? overallFeedback.trim()
         : window.prompt(
             `Enter official decision feedback for marking this proposal as ${targetDecisionStatus.toUpperCase()}:`,
-            `Evaluated via rubric (${calculatedMetrics.totalScore}/50).`
+            `Evaluated via rubric (${calculatedMetrics.totalScore}/100).`
           );
 
     if (!reason || reason.trim().length < 5) {

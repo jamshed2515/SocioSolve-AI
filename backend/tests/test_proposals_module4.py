@@ -460,22 +460,48 @@ def test_module4_fastapi_client():
 
     client = TestClient(app)
 
-    # 1. Rubric criteria endpoint returns max score of 100
+    # 1. Rubric criteria endpoint & alias returns max score of 100
     res = client.get("/api/proposals/rubric-criteria")
     assert res.status_code == 200, res.text
     rubric_data = res.json()
     assert rubric_data["maxTotalScore"] == 100
     assert len(rubric_data["criteria"]) == 5
 
-    # 2. Get published challenges
+    res_alias = client.get("/api/proposals/meta/rubric")
+    assert res_alias.status_code == 200
+    assert res_alias.json()["maxTotalScore"] == 100
+
+    # 2. Get published challenges and metadata alias
     res = client.get("/api/proposals/challenges/published")
     assert res.status_code == 200
     challenges = res.json()["challenges"]
     assert len(challenges) >= 1
     challenge_id = challenges[0]["id"]
 
-    # 3. Create Proposal via POST /api/proposals
-    create_payload = {
+    res_meta_ch = client.get("/api/proposals/meta/challenges")
+    assert res_meta_ch.status_code == 200
+    assert len(res_meta_ch.json()["challenges"]) >= 1
+
+    # 2b. Teams metadata & alias
+    res_teams = client.get("/api/proposals/teams/my-teams")
+    assert res_teams.status_code == 200
+    res_teams_meta = client.get("/api/proposals/meta/my-teams")
+    assert res_teams_meta.status_code == 200
+
+    # 2c. Document upload endpoint
+    file_bytes = b"%PDF-1.4 Mock proposal technical specification and architecture document"
+    res_upload = client.post(
+        "/api/proposals/upload-document",
+        files={"file": ("architecture.pdf", file_bytes, "application/pdf")},
+        data={"docType": "implementation_plan"},
+    )
+    assert res_upload.status_code == 200, res_upload.text
+    upload_res = res_upload.json()
+    assert upload_res["name"] == "architecture.pdf"
+    assert "url" in upload_res
+
+    # 3. Create Draft Proposal via POST /api/proposals (submitImmediately=False)
+    draft_payload = {
         "title": "Smart Solar Cold Storage for Farmers",
         "challengeId": challenge_id,
         "problemUnderstanding": "Post-harvest crop spoilage due to lack of decentralized cold storage.",
@@ -486,16 +512,78 @@ def test_module4_fastapi_client():
         "requiredResources": "Food science lab partnership, cold room insulation panels.",
         "expectedImpact": "Reduce fruit/vegetable wastage by 45% for 120 smallholder farming families.",
         "estimatedTimeline": "14 Weeks",
-        "submitImmediately": True,
+        "supportingDocuments": [
+            {
+                "name": upload_res["name"],
+                "url": upload_res["url"],
+                "docType": upload_res["docType"],
+                "sizeBytes": upload_res["sizeBytes"],
+            }
+        ],
+        "submitImmediately": False,
     }
-    res = client.post("/api/proposals", json=create_payload)
+    res = client.post("/api/proposals", json=draft_payload)
     assert res.status_code == 201, res.text
     prop_data = res.json()
     proposal_id = prop_data["id"]
-    assert prop_data["status"] == "submitted"
+    assert prop_data["status"] == "draft"
 
-    # 4. Switch to Reviewer & submit evaluation via POST /api/proposals/{id}/review (singular alias)
+    # 3b. Update draft proposal via PUT /api/proposals/{id}
+    update_payload = {
+        "title": "Smart Solar Cold Storage for Rural Farmers (Updated)",
+        "additionalNotes": "Updated with IoT architecture schema and temperature telemetry.",
+    }
+    res_upd = client.put(f"/api/proposals/{proposal_id}", json=update_payload)
+    assert res_upd.status_code == 200
+    assert res_upd.json()["title"] == "Smart Solar Cold Storage for Rural Farmers (Updated)"
+
+    # 3c. Submit draft proposal via POST /api/proposals/{id}/submit
+    res_sub = client.post(f"/api/proposals/{proposal_id}/submit")
+    assert res_sub.status_code == 200
+    assert res_sub.json()["status"] == "submitted"
+
+    # 3d. Withdraw proposal via POST /api/proposals/{id}/withdraw
+    res_with = client.post(f"/api/proposals/{proposal_id}/withdraw", json={"reason": "Need to update budget figures."})
+    assert res_with.status_code == 200
+    assert res_with.json()["status"] == "withdrawn"
+
+    # 3e. Resubmit withdrawn proposal
+    res_resub = client.post(f"/api/proposals/{proposal_id}/submit")
+    assert res_resub.status_code == 200
+    assert res_resub.json()["status"] == "submitted"
+
+    # 3f. Query proposal listings & my proposals
+    res_list = client.get("/api/proposals?page=1&limit=10")
+    assert res_list.status_code == 200
+    assert res_list.json()["total"] >= 1
+
+    res_my = client.get("/api/proposals/my?page=1&limit=10")
+    assert res_my.status_code == 200
+    assert res_my.json()["total"] >= 1
+
+    # 3g. Dashboard stats endpoint
+    res_stats = client.get("/api/proposals/dashboard-stats?scope=all")
+    assert res_stats.status_code == 200
+    assert "statusDistribution" in res_stats.json()
+
+    res_stats_mine = client.get("/api/proposals/dashboard-stats?scope=mine")
+    assert res_stats_mine.status_code == 200
+
+    # 3h. Review queue as Student must be forbidden (403)
+    res_queue_forbidden = client.get("/api/proposals/review-queue")
+    assert res_queue_forbidden.status_code == 403
+
+    # 4. Switch to Reviewer
     current_test_user[0] = mock_reviewer
+
+    # Review queue as Reviewer must succeed (200)
+    res_queue = client.get("/api/proposals/review-queue")
+    assert res_queue.status_code == 200
+
+    res_queue_alias = client.get("/api/proposals/reviewer/queue")
+    assert res_queue_alias.status_code == 200
+
+    # Submit evaluation via POST /api/proposals/{id}/review (singular alias)
     review_payload = {
         "criteriaScores": [
             {"key": c["key"], "label": c["label"], "score": 19, "maxScore": 20, "comment": "Exemplary"}
@@ -511,11 +599,24 @@ def test_module4_fastapi_client():
     assert review_res["review"]["totalScore"] == 95.0
     assert review_res["review"]["maxTotalScore"] == 100.0
 
-    # 5. Fetch review history via GET /api/proposals/{id}/review-history
+    # 5. Fetch reviews via GET /api/proposals/{id}/reviews
+    res_revs = client.get(f"/api/proposals/{proposal_id}/reviews")
+    assert res_revs.status_code == 200
+    assert len(res_revs.json()["reviews"]) >= 1
+
+    # 5b. Fetch review history via GET /api/proposals/{id}/review-history and alias
     res = client.get(f"/api/proposals/{proposal_id}/review-history")
     assert res.status_code == 200
     rev_hist_data = res.json()
     assert len(rev_hist_data["reviewHistory"]) >= 1
+
+    res_hist_alias = client.get(f"/api/proposals/{proposal_id}/reviews/history")
+    assert res_hist_alias.status_code == 200
+
+    # 5c. Fetch status history via GET /api/proposals/{id}/status-history
+    res_status_hist = client.get(f"/api/proposals/{proposal_id}/status-history")
+    assert res_status_hist.status_code == 200
+    assert len(res_status_hist.json()["statusHistory"]) >= 1
 
     # 6. Update status via PATCH /api/proposals/{id}/status (patch alias)
     patch_payload = {
@@ -525,6 +626,36 @@ def test_module4_fastapi_client():
     res = client.patch(f"/api/proposals/{proposal_id}/status", json=patch_payload)
     assert res.status_code == 200, res.text
     assert res.json()["status"] == "accepted"
+
+    # 6b. Verify accepted proposal is LOCKED from editing (PUT /api/proposals/{id} -> 400)
+    current_test_user[0] = mock_student
+    res_locked_edit = client.put(f"/api/proposals/{proposal_id}", json={"title": "Unauthorized Modification"})
+    assert res_locked_edit.status_code == 400
+
+    # 7. Test Delete draft proposal endpoint (DELETE /api/proposals/{id})
+    res_draft_to_delete = client.post(
+        "/api/proposals",
+        json={
+            "title": "Temporary Draft Proposal for Deletion",
+            "challengeId": challenge_id,
+            "problemUnderstanding": "Draft problem notes",
+            "submitImmediately": False,
+        },
+    )
+    assert res_draft_to_delete.status_code == 201
+    del_id = res_draft_to_delete.json()["id"]
+
+    res_del = client.delete(f"/api/proposals/{del_id}")
+    assert res_del.status_code == 200
+
+    # 8. Notifications endpoints
+    res_notif = client.get("/api/proposals/notifications")
+    assert res_notif.status_code == 200
+    notifs = res_notif.json()["notifications"]
+    if notifs:
+        notif_id = notifs[0]["id"]
+        res_read = client.put(f"/api/proposals/notifications/{notif_id}/read")
+        assert res_read.status_code == 200
 
     # Reset overrides
     app.dependency_overrides.clear()

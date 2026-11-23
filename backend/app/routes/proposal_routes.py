@@ -28,17 +28,20 @@ async def get_dashboard_stats(
 
 
 @router.get("/rubric-criteria", summary="Get structured evaluation rubric criteria")
+@router.get("/meta/rubric", summary="Alias: Get structured evaluation rubric criteria")
 async def get_rubric_criteria(current_user: dict = Depends(get_current_user)):
     return {"criteria": DEFAULT_RUBRIC_CRITERIA, "maxTotalScore": 100}
 
 
 @router.get("/challenges/published", summary="Get published challenges eligible for proposals")
+@router.get("/meta/challenges", summary="Alias: Get published challenges eligible for proposals")
 async def get_published_challenges(current_user: dict = Depends(get_current_user)):
     challenges = await proposal_service.ensure_seed_challenges()
     return {"challenges": challenges}
 
 
 @router.get("/teams/my-teams", summary="Get user's teams from Module 3 if available")
+@router.get("/meta/my-teams", summary="Alias: Get user's teams from Module 3 if available")
 async def get_my_teams(current_user: dict = Depends(get_current_user)):
     return await proposal_service.get_user_teams(current_user)
 
@@ -117,6 +120,7 @@ async def list_my_proposals(
 
 
 @router.get("/review-queue", summary="Get reviewable proposals for authorized reviewers & admins")
+@router.get("/reviewer/queue", summary="Alias: Get reviewable proposals for authorized reviewers & admins")
 async def list_review_queue(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -212,6 +216,7 @@ async def upsert_proposal_review(
 
 
 @router.get("/{proposal_id}/review-history", summary="Get proposal evaluation review history")
+@router.get("/{proposal_id}/reviews/history", summary="Alias: Get proposal evaluation review history")
 async def get_proposal_review_history(
     proposal_id: str,
     current_user: dict = Depends(get_current_user),
