@@ -11,9 +11,12 @@ class Settings(BaseSettings):
     MONGODB_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "sociosolve"
 
-    # Firebase Admin SDK (service account JSON stays on the backend only)
-    FIREBASE_PROJECT_ID: str = ""
+    # Firebase Admin SDK (service account key stays on the backend only).
+    # The project ID is public (it is also in the frontend web config).
+    FIREBASE_PROJECT_ID: str = "sociosolve-ai"
     FIREBASE_SERVICE_ACCOUNT_PATH: str = ""
+    # Alternative to the file: the key's JSON (raw or base64) in a single env var
+    FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
 
     # CORS (CORS_ORIGINS preferred; ALLOWED_ORIGINS kept for backward compatibility)
     CORS_ORIGINS: str = ""

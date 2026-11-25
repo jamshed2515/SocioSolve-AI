@@ -12,6 +12,7 @@ from fastapi.concurrency import run_in_threadpool
 from firebase_admin import auth as fb_auth
 
 from app.config.database import get_database
+from app.config.firebase import has_admin_credentials
 from app.middleware.auth_middleware import require_role
 from app.models.user import UserRole, ApprovalStatus, APPROVAL_REQUIRED_ROLES
 from app.schemas.auth_schema import ApprovalRequest
@@ -60,7 +61,8 @@ async def set_active(user_id: str, active: bool, admin: dict = Depends(admin_onl
         {"_id": user["_id"]},
         {"$set": {"is_active": active, "updated_at": datetime.now(timezone.utc)}},
     )
-    if not active and user.get("firebase_uid"):
-        # Kill existing sessions immediately
+    # Kill existing sessions immediately (needs the Firebase admin key; in local limited
+    # mode the is_active=False flag above still blocks every API call for this user).
+    if not active and user.get("firebase_uid") and has_admin_credentials():
         await run_in_threadpool(fb_auth.revoke_refresh_tokens, user["firebase_uid"])
     return user_to_profile(await _get_user(user_id))

@@ -1,6 +1,20 @@
 version: "3.9"
 
 services:
+  # ── MongoDB for local development ─────────────────────────────────────────
+  # Start just the database with:  docker compose up -d mongo
+  # Then use MONGODB_URI=mongodb://localhost:27017 in backend/.env
+  mongo:
+    image: mongo:7
+    container_name: sociosolve_mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    networks:
+      - sociosolve_net
+
   # ── Backend (FastAPI) ──────────────────────────────────────────────────────
   backend:
     build:
@@ -34,3 +48,6 @@ services:
 networks:
   sociosolve_net:
     driver: bridge
+
+volumes:
+  mongo_data:

@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from firebase_admin import auth as fb_auth  # noqa: E402
 
 from app.config import database  # noqa: E402
+from app.config import firebase as firebase_config  # noqa: E402
 from app.main import app  # noqa: E402
 from app.utils import firebase_token  # noqa: E402
 
@@ -107,6 +108,18 @@ def fake_verify(token):
     if token not in TOKENS:
         raise HTTPException(401, "Invalid authentication token.")
     return TOKENS[token]
+
+
+@pytest.fixture(autouse=True)
+def firebase_admin_key(monkeypatch):
+    """Behave like production (service-account key loaded) unless a test opts out."""
+    monkeypatch.setattr(firebase_config, "_has_admin_credentials", True)
+
+
+@pytest.fixture
+def no_firebase_key(monkeypatch):
+    """Local limited mode: no service-account key."""
+    monkeypatch.setattr(firebase_config, "_has_admin_credentials", False)
 
 
 @pytest.fixture

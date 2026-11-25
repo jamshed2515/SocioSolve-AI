@@ -83,6 +83,9 @@ SocioSolve-AI/
 
 ## 🚀 Quick Start
 
+> **New on the team?** Follow [LOCAL_SETUP.md](LOCAL_SETUP.md). It runs locally **without** the
+> Firebase service-account key; you only need MongoDB.
+
 ### Backend
 
 ```bash
@@ -90,7 +93,7 @@ cd backend
 python -m venv venv
 venv\Scripts\activate          # Windows
 pip install -r requirements.txt
-copy .env.example .env         # Fill in your MongoDB Atlas URL & secrets
+copy .env.example .env         # Works as-is with a local MongoDB
 uvicorn app.main:app --reload
 ```
 
