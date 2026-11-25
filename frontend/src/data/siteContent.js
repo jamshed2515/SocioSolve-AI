@@ -47,10 +47,57 @@ export const HOW_IT_WORKS = [
 ];
 
 export const AUDIENCES = [
-  { icon: Landmark,      title: "Citizens & NGOs",      text: "Report real problems in your community and follow them until they are solved." },
-  { icon: GraduationCap, title: "Students",             text: "Find meaningful challenges that match your skills, form teams and build solutions." },
-  { icon: Building2,     title: "Universities",         text: "Guide student teams and turn coursework into real-world societal impact." },
-  { icon: Factory,       title: "Industry partners",    text: "Offer mentorship, datasets and funding, and discover talent and ideas early." },
+  {
+    icon: Landmark, title: "Citizens & NGOs", tone: "accent",
+    text: "Report real problems in your community and follow them until they are solved.",
+    can: ["Submit challenges with photos & location", "Track progress on your reports"],
+  },
+  {
+    icon: GraduationCap, title: "Students", tone: "primary",
+    text: "Find meaningful challenges that match your skills, form teams and build solutions.",
+    can: ["Vote, comment and join teams", "Submit solution proposals"],
+  },
+  {
+    icon: Building2, title: "Universities", tone: "accent",
+    text: "Guide student teams and turn coursework into real-world societal impact.",
+    can: ["Mentor multidisciplinary teams", "Review and score proposals"],
+  },
+  {
+    icon: Factory, title: "Industry partners", tone: "primary",
+    text: "Offer mentorship, datasets and funding, and discover talent and ideas early.",
+    can: ["Offer mentors, data and funding", "Sponsor project opportunities"],
+  },
+];
+
+/** Facts about the platform itself (no invented usage numbers). */
+export const FACTS = [
+  { value: "5", label: "user roles" },
+  { value: "6", label: "integrated modules" },
+  { value: "4", label: "steps from problem to solution" },
+  { value: "1", label: "shared platform" },
+];
+
+export const FAQS = [
+  {
+    q: "Who can submit a challenge?",
+    a: "Citizens, NGOs, government bodies and organizations can describe a problem, its location and its impact, and attach supporting photos or documents.",
+  },
+  {
+    q: "What happens after a challenge is submitted?",
+    a: "Students and universities browse it, vote on the important ones and comment. Teams then form around a challenge and submit solution proposals.",
+  },
+  {
+    q: "How are solution proposals evaluated?",
+    a: "Reviewers score each proposal with a structured rubric and leave feedback. Every proposal shows its status: submitted, under review, accepted or rejected.",
+  },
+  {
+    q: "How does the AI help?",
+    a: "It flags duplicate or similar challenges, recommends challenges that fit a student's skills and interests, and matches teams with suitable industry mentors, with an explanation for each match.",
+  },
+  {
+    q: "How can a company get involved?",
+    a: "Industry partners can offer mentors, technical expertise, datasets, funding or project opportunities, and teams can request their support directly.",
+  },
 ];
 
 export const MODULES = [

@@ -5,6 +5,7 @@ import { z } from "zod";
 import toast from "react-hot-toast";
 import { Mail, Send, MessageSquare, Handshake, GraduationCap } from "lucide-react";
 import PublicLayout from "../../components/layouts/PublicLayout";
+import Reveal from "../../components/public/Reveal";
 import { CONTACT_EMAIL } from "../../data/siteContent";
 
 const TOPICS = [
@@ -50,10 +51,16 @@ export default function Contact() {
 
   return (
     <PublicLayout>
-      <section className="bg-hero-gradient border-b border-white/10">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-accent-400 mb-3">Contact</p>
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white">Let&apos;s solve something together</h1>
+      <section className="relative overflow-hidden bg-hero-gradient border-b border-white/10">
+        <div className="absolute inset-0 bg-grid" aria-hidden />
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[36rem] h-72 rounded-full bg-primary-500/20 blur-3xl" aria-hidden />
+        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-24 text-center animate-slide-up">
+          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-accent-400 mb-4">
+            <span className="w-6 h-px bg-accent-400/60" aria-hidden /> Contact
+          </p>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-[1.08] tracking-tight">
+            Let&apos;s solve something <span className="text-gradient">together</span>
+          </h1>
           <p className="text-white/65 mt-5 leading-relaxed">
             Questions, partnership ideas or a challenge you want to share. Send us a message.
           </p>
@@ -63,8 +70,8 @@ export default function Contact() {
       <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 grid grid-cols-1 lg:grid-cols-5 gap-8">
         {/* ── Info column ────────────────────────────────── */}
         <div className="lg:col-span-2 space-y-4">
-          {REASONS.map(({ icon: Icon, title, text }) => (
-            <div key={title} className="glass p-5 flex gap-4">
+          {REASONS.map(({ icon: Icon, title, text }, i) => (
+            <Reveal key={title} delay={i * 80} className="glass card-hover p-5 flex gap-4">
               <span className="w-10 h-10 rounded-xl bg-primary-500/15 border border-primary-500/30 flex items-center justify-center shrink-0">
                 <Icon size={18} className="text-primary-300" />
               </span>
@@ -72,7 +79,7 @@ export default function Contact() {
                 <h2 className="font-semibold text-white">{title}</h2>
                 <p className="text-sm text-white/55 mt-1">{text}</p>
               </div>
-            </div>
+            </Reveal>
           ))}
 
           {CONTACT_EMAIL && (
@@ -95,7 +102,11 @@ export default function Contact() {
         </div>
 
         {/* ── Form ───────────────────────────────────────── */}
-        <form onSubmit={handleSubmit(onSubmit)} noValidate className="lg:col-span-3 glass p-6 sm:p-8 space-y-5">
+        <Reveal as="form" onSubmit={handleSubmit(onSubmit)} noValidate className="lg:col-span-3 glass p-6 sm:p-8 space-y-5 shadow-2xl shadow-black/30 bg-dark-800/60">
+          <div className="pb-2">
+            <h2 className="text-xl font-semibold text-white">Send us a message</h2>
+            <p className="text-sm text-white/50 mt-1">All fields are required.</p>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <label htmlFor="c-name" className="label">Your name</label>
@@ -127,7 +138,7 @@ export default function Contact() {
           <button type="submit" className="btn-primary w-full sm:w-auto">
             <Send size={17} /> Send message
           </button>
-        </form>
+        </Reveal>
       </section>
     </PublicLayout>
   );
