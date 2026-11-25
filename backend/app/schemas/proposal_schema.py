@@ -92,8 +92,8 @@ class ProposalUpdateRequest(BaseModel):
 class CriterionScoreSchema(BaseModel):
     key: str
     label: str
-    score: float = Field(..., ge=1, le=10)
-    maxScore: float = Field(default=10, ge=1, le=10)
+    score: float = Field(..., ge=0, le=100)
+    maxScore: float = Field(default=20, ge=1, le=100)
     comment: Optional[str] = ""
 
 

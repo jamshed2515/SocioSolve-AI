@@ -26,33 +26,33 @@ import { useAuth } from "../../context/AuthContext";
 const DEFAULT_CRITERIA = [
   {
     key: "innovation",
-    label: "Innovation & Originality",
+    label: "Innovation and Originality",
     description: "Uniqueness of the proposed approach and creative use of technology or methodology.",
-    maxScore: 10,
+    maxScore: 20,
   },
   {
     key: "feasibility",
-    label: "Feasibility",
-    description: "Practicality of the implementation plan, timeline, and resource requirements.",
-    maxScore: 10,
-  },
-  {
-    key: "technical_quality",
-    label: "Technical Quality",
-    description: "Soundness of the technical architecture, prototype readiness, and engineering rigor.",
-    maxScore: 10,
+    label: "Technical Feasibility",
+    description: "Practicality of the implementation plan, engineering soundness, and resource requirements.",
+    maxScore: 20,
   },
   {
     key: "societal_impact",
     label: "Societal Impact",
-    description: "Measurable benefit to target communities and alignment with the societal challenge.",
-    maxScore: 10,
+    description: "Measurable benefit to target communities, civic value, and alignment with the challenge.",
+    maxScore: 20,
   },
   {
-    key: "sustainability",
-    label: "Sustainability & Scalability",
-    description: "Long-term viability, maintainability, and potential to scale across regions or institutions.",
-    maxScore: 10,
+    key: "implementation_strategy",
+    label: "Implementation Strategy",
+    description: "Milestones, deployment roadmap, prototype readiness, and risk management.",
+    maxScore: 20,
+  },
+  {
+    key: "scalability",
+    label: "Scalability and Sustainability",
+    description: "Long-term viability, maintainability, financial model, and multi-region scalability.",
+    maxScore: 20,
   },
 ];
 
@@ -86,12 +86,17 @@ export default function ReviewQueuePage() {
         setCriteriaScores(
           DEFAULT_CRITERIA.map((base) => {
             const found = existingMyReview.criteriaScores.find((c) => c.key === base.key);
+            let s = 16;
+            if (found) {
+              const raw = Number(found.score);
+              s = found.maxScore === 10 ? raw * 2 : raw;
+            }
             return {
               key: base.key,
               label: base.label,
               description: base.description,
               maxScore: base.maxScore,
-              score: found ? Number(found.score) : 8,
+              score: Math.min(20, Math.max(0, s)),
               comment: found?.comment || "",
             };
           })
@@ -102,7 +107,7 @@ export default function ReviewQueuePage() {
         setCriteriaScores(
           DEFAULT_CRITERIA.map((base) => ({
             ...base,
-            score: 8,
+            score: 16,
             comment: "",
           }))
         );
@@ -158,10 +163,10 @@ export default function ReviewQueuePage() {
   // Auto-calculated Total Score & Average Score
   const calculatedMetrics = useMemo(() => {
     if (!criteriaScores.length) {
-      return { totalScore: 0, maxTotal: 50, averageScore: 0, percentage: 0 };
+      return { totalScore: 0, maxTotal: 100, averageScore: 0, percentage: 0 };
     }
     const total = criteriaScores.reduce((acc, c) => acc + Number(c.score || 0), 0);
-    const maxTotal = criteriaScores.reduce((acc, c) => acc + Number(c.maxScore || 10), 0);
+    const maxTotal = criteriaScores.reduce((acc, c) => acc + Number(c.maxScore || 20), 0);
     const avg = Number((total / criteriaScores.length).toFixed(2));
     const pct = Number(((total / maxTotal) * 100).toFixed(1));
     return { totalScore: total, maxTotal, averageScore: avg, percentage: pct };
@@ -193,7 +198,7 @@ export default function ReviewQueuePage() {
           key: c.key,
           label: c.label,
           score: Number(c.score),
-          maxScore: Number(c.maxScore || 10),
+          maxScore: Number(c.maxScore || 20),
           comment: c.comment || "",
         })),
         overallFeedback: overallFeedback.trim(),
@@ -225,7 +230,7 @@ export default function ReviewQueuePage() {
         ? overallFeedback.trim()
         : window.prompt(
             `Enter official decision feedback for marking this proposal as ${targetDecisionStatus.toUpperCase()}:`,
-            `Evaluated via rubric (${calculatedMetrics.totalScore}/50).`
+            `Evaluated via rubric (${calculatedMetrics.totalScore}/100).`
           );
 
     if (!reason || reason.trim().length < 5) {
@@ -496,21 +501,21 @@ export default function ReviewQueuePage() {
                       Grading Rubric
                     </h3>
                     <p className="text-xs text-white/50">
-                      Score each criterion from 1 (Disappointing) to 10 (Exceptional).
+                      Score 5 criteria from 0 to 20 points (Total maximum score: 100).
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-extrabold text-amber-300">
-                      {calculatedMetrics.totalScore}/{calculatedMetrics.maxTotal}
+                    <span className="text-xl font-extrabold text-amber-300">
+                      {calculatedMetrics.totalScore} / {calculatedMetrics.maxTotal}
                     </span>
-                    <span className="block text-[11px] text-accent-400">
-                      Avg: {calculatedMetrics.averageScore}/10
+                    <span className="block text-[11px] text-accent-400 font-semibold">
+                      {calculatedMetrics.percentage}% · Avg {calculatedMetrics.averageScore} / 20
                     </span>
                   </div>
                 </div>
 
                 {/* 5 Rubric Criteria */}
-                <div className="space-y-4 max-h-[48vh] overflow-y-auto pr-1">
+                <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
                   {criteriaScores.map((crit, index) => (
                     <div
                       key={crit.key}
@@ -529,29 +534,60 @@ export default function ReviewQueuePage() {
                           </div>
                         </div>
                         <span className="px-2.5 py-1 rounded-lg bg-primary-500/20 text-primary-300 font-bold text-xs shrink-0">
-                          {crit.score} / 10
+                          {crit.score} / {crit.maxScore || 20}
                         </span>
                       </div>
 
-                      {/* Interactive 1-10 Score Pill Selector */}
-                      <div className="grid grid-cols-10 gap-1">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-                          const selected = Number(crit.score) === num;
-                          return (
+                      {/* Interactive 0-20 Range Slider + Stepper + Preset Benchmarks */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min="0"
+                            max={crit.maxScore || 20}
+                            step="1"
+                            value={crit.score}
+                            onChange={(e) => handleCriterionScoreChange(crit.key, e.target.value)}
+                            className="w-full accent-primary-500 cursor-pointer h-2 bg-dark-800 rounded-lg"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            max={crit.maxScore || 20}
+                            value={crit.score}
+                            onChange={(e) =>
+                              handleCriterionScoreChange(
+                                crit.key,
+                                Math.max(0, Math.min(crit.maxScore || 20, Number(e.target.value) || 0))
+                              )
+                            }
+                            className="input w-16 py-1 px-2 text-center text-xs font-bold shrink-0"
+                          />
+                        </div>
+
+                        {/* Benchmark Presets */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          {[
+                            { label: "Fair (8)", val: 8 },
+                            { label: "Adequate (12)", val: 12 },
+                            { label: "Strong (16)", val: 16 },
+                            { label: "Exemplary (18)", val: 18 },
+                            { label: "Max (20)", val: 20 },
+                          ].map((b) => (
                             <button
-                              key={num}
+                              key={b.val}
                               type="button"
-                              onClick={() => handleCriterionScoreChange(crit.key, num)}
-                              className={`py-1.5 rounded-lg text-xs font-bold transition ${
-                                selected
-                                  ? "bg-primary-500 text-white shadow-md shadow-primary-500/30"
-                                  : "bg-dark-800 text-white/50 hover:text-white hover:bg-white/10"
+                              onClick={() => handleCriterionScoreChange(crit.key, b.val)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium transition ${
+                                Number(crit.score) === b.val
+                                  ? "bg-primary-500 text-white"
+                                  : "bg-white/5 text-white/50 hover:bg-white/10 hover:text-white"
                               }`}
                             >
-                              {num}
+                              {b.label}
                             </button>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
 
                       <input

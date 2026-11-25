@@ -74,8 +74,8 @@ export default function ProposalFormPage() {
 
         if (isEditMode) {
           const existing = await proposalService.getProposalById(id);
-          if (existing.status !== "draft") {
-            toast.error("Only draft proposals can be edited.");
+          if (existing.status !== "draft" && existing.status !== "withdrawn") {
+            toast.error("Only draft or withdrawn proposals can be edited.");
             navigate(`/proposals/${id}`);
             return;
           }

@@ -113,15 +113,36 @@ export const proposalService = {
     return data;
   },
 
+  // Submit official review (alias for POST /proposals/{id}/review)
+  submitReview: async (proposalId, payload) => {
+    const { data } = await api.post(`/proposals/${proposalId}/review`, payload);
+    return data;
+  },
+
   // Get status history
   getStatusHistory: async (proposalId) => {
     const { data } = await api.get(`/proposals/${proposalId}/status-history`);
     return data;
   },
 
+  // Get full immutable evaluation review history
+  getReviewHistory: async (proposalId) => {
+    const { data } = await api.get(`/proposals/${proposalId}/review-history`);
+    return data;
+  },
+
   // Change status through controlled workflow (Submitted -> Under Review -> Accepted/Rejected)
   changeStatus: async (proposalId, toStatus, comment) => {
     const { data } = await api.post(`/proposals/${proposalId}/status`, {
+      toStatus,
+      comment,
+    });
+    return data;
+  },
+
+  // Update status (alias for PATCH /proposals/{id}/status)
+  updateStatus: async (proposalId, toStatus, comment) => {
+    const { data } = await api.patch(`/proposals/${proposalId}/status`, {
       toStatus,
       comment,
     });

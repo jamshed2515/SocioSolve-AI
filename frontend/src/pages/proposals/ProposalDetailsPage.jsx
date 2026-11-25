@@ -676,84 +676,121 @@ export default function ProposalDetailsPage() {
                 )}
               </div>
             ) : (
-              reviews.map((rev) => (
-                <div key={rev.id} className="glass p-6 space-y-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-white">{rev.reviewerName}</span>
-                        <span className="badge bg-white/10 text-white/70 text-[10px] uppercase">
-                          {rev.reviewerRole}
-                        </span>
-                        {rev.status === "draft" && (
-                          <span className="badge bg-amber-500/20 text-amber-300 text-[10px]">
-                            Draft Review (Visible only to you)
+              <div className="space-y-6">
+                {reviews.map((rev) => (
+                  <div key={rev.id} className="glass p-6 space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-white">{rev.reviewerName}</span>
+                          <span className="badge bg-white/10 text-white/70 text-[10px] uppercase">
+                            {rev.reviewerRole}
                           </span>
-                        )}
+                          {rev.status === "draft" && (
+                            <span className="badge bg-amber-500/20 text-amber-300 text-[10px]">
+                              Draft Review (Visible only to you)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-white/40 mt-0.5">
+                          Evaluated on {new Date(rev.submittedAt || rev.updatedAt).toLocaleString()}
+                        </p>
                       </div>
-                      <p className="text-xs text-white/40 mt-0.5">
-                        Evaluated on {new Date(rev.submittedAt || rev.updatedAt).toLocaleString()}
+
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`badge uppercase text-xs ${
+                            rev.recommendation === "accept"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : rev.recommendation === "reject"
+                              ? "bg-rose-500/20 text-rose-300"
+                              : "bg-amber-500/20 text-amber-300"
+                          }`}
+                        >
+                          Recommendation: {rev.recommendation}
+                        </span>
+                        <div className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-sm">
+                          {rev.totalScore} / {rev.maxTotalScore || 100} ({rev.percentageScore || ((rev.totalScore / (rev.maxTotalScore || 100)) * 100).toFixed(0)}%)
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rubric Criteria Breakdown */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                      {(rev.criteriaScores || []).map((crit) => (
+                        <div
+                          key={crit.key}
+                          className="p-3.5 rounded-xl bg-white/5 border border-white/10 flex flex-col justify-between gap-2"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <span className="text-xs font-semibold text-white">{crit.label}</span>
+                              <span className="text-xs font-bold text-primary-300">
+                                {crit.score}/{crit.maxScore || 20}
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden mb-2">
+                              <div
+                                className="h-full bg-primary-500 rounded-full"
+                                style={{ width: `${((crit.score || 0) / (crit.maxScore || 20)) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                          {crit.comment && (
+                            <p className="text-[11px] text-white/60 italic">"{crit.comment}"</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Written Overall Feedback */}
+                    <div className="p-4 rounded-xl bg-dark-800 border border-white/10">
+                      <p className="text-xs font-semibold text-white/60 mb-1 flex items-center gap-1.5">
+                        <MessageSquare size={13} className="text-primary-400" />
+                        Written Evaluation Feedback
+                      </p>
+                      <p className="text-sm text-white/85 whitespace-pre-line">
+                        {rev.overallFeedback}
                       </p>
                     </div>
-
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`badge uppercase text-xs ${
-                          rev.recommendation === "accept"
-                            ? "bg-emerald-500/20 text-emerald-300"
-                            : rev.recommendation === "reject"
-                            ? "bg-rose-500/20 text-rose-300"
-                            : "bg-amber-500/20 text-amber-300"
-                        }`}
-                      >
-                        Recommendation: {rev.recommendation}
-                      </span>
-                      <div className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-sm">
-                        {rev.totalScore} / {rev.maxTotalScore} (Avg {rev.averageScore}/10)
-                      </div>
-                    </div>
                   </div>
+                ))}
 
-                  {/* Rubric Criteria Breakdown */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-                    {(rev.criteriaScores || []).map((crit) => (
-                      <div
-                        key={crit.key}
-                        className="p-3.5 rounded-xl bg-white/5 border border-white/10 flex flex-col justify-between gap-2"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="text-xs font-semibold text-white">{crit.label}</span>
-                            <span className="text-xs font-bold text-primary-300">
-                              {crit.score}/{crit.maxScore || 10}
+                {/* Immutable Evaluation Revision History */}
+                {(proposal.reviewHistory || []).length > 1 && (
+                  <div className="glass p-6 space-y-4 border-amber-500/20">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Award size={16} className="text-amber-400" />
+                      Evaluation Audit History & Revisions ({(proposal.reviewHistory || []).length} events)
+                    </h4>
+                    <div className="space-y-3">
+                      {(proposal.reviewHistory || []).map((entry, idx) => (
+                        <div key={idx} className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs space-y-1.5">
+                          <div className="flex items-center justify-between text-white/70">
+                            <span className="font-semibold text-white">
+                              {entry.reviewerName} ({entry.reviewerRole}) — <span className="capitalize text-primary-300">{entry.action?.replace("_", " ")}</span>
+                            </span>
+                            <span className="text-white/40">
+                              {new Date(entry.timestamp).toLocaleString()}
                             </span>
                           </div>
-                          <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden mb-2">
-                            <div
-                              className="h-full bg-primary-500 rounded-full"
-                              style={{ width: `${((crit.score || 0) / (crit.maxScore || 10)) * 100}%` }}
-                            />
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-amber-300">
+                              Score: {entry.totalScore} / {entry.maxTotalScore || 100} ({entry.percentageScore}%)
+                            </span>
+                            <span className="badge bg-white/10 text-white/70 uppercase text-[10px]">
+                              {entry.recommendation}
+                            </span>
                           </div>
+                          {entry.overallFeedback && (
+                            <p className="text-white/60 italic whitespace-pre-line">"{entry.overallFeedback}"</p>
+                          )}
                         </div>
-                        {crit.comment && (
-                          <p className="text-[11px] text-white/60 italic">"{crit.comment}"</p>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-
-                  {/* Written Overall Feedback */}
-                  <div className="p-4 rounded-xl bg-dark-800 border border-white/10">
-                    <p className="text-xs font-semibold text-white/60 mb-1 flex items-center gap-1.5">
-                      <MessageSquare size={13} className="text-primary-400" />
-                      Written Evaluation Feedback
-                    </p>
-                    <p className="text-sm text-white/85 whitespace-pre-line">
-                      {rev.overallFeedback}
-                    </p>
-                  </div>
-                </div>
-              ))
+                )}
+              </div>
             )}
           </div>
         )}

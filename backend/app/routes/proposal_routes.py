@@ -28,26 +28,22 @@ async def get_dashboard_stats(
 
 
 @router.get("/rubric-criteria", summary="Get structured evaluation rubric criteria")
+@router.get("/meta/rubric", summary="Alias: Get structured evaluation rubric criteria")
 async def get_rubric_criteria(current_user: dict = Depends(get_current_user)):
-    return {"criteria": DEFAULT_RUBRIC_CRITERIA, "maxTotalScore": 50}
+    return {"criteria": DEFAULT_RUBRIC_CRITERIA, "maxTotalScore": 100}
 
 
 @router.get("/challenges/published", summary="Get published challenges eligible for proposals")
+@router.get("/meta/challenges", summary="Alias: Get published challenges eligible for proposals")
 async def get_published_challenges(current_user: dict = Depends(get_current_user)):
-    db = get_database()
-    challenges = await proposal_service.ensure_seed_challenges(db)
+    challenges = await proposal_service.ensure_seed_challenges()
     return {"challenges": challenges}
 
 
 @router.get("/teams/my-teams", summary="Get user's teams from Module 3 if available")
+@router.get("/meta/my-teams", summary="Alias: Get user's teams from Module 3 if available")
 async def get_my_teams(current_user: dict = Depends(get_current_user)):
-    db = get_database()
-    uid = str(current_user["_id"])
-    cursor = db.teams.find(
-        {"$or": [{"leaderId": uid}, {"leader_id": uid}, {"members.userId": uid}, {"memberIds": uid}]}
-    ).limit(25)
-    docs = await cursor.to_list(length=25)
-    return {"teams": [proposal_service._serialize_doc(t) for t in docs]}
+    return await proposal_service.get_user_teams(current_user)
 
 
 @router.get("/notifications", summary="Get proposal workflow notifications for current user")
@@ -124,6 +120,7 @@ async def list_my_proposals(
 
 
 @router.get("/review-queue", summary="Get reviewable proposals for authorized reviewers & admins")
+@router.get("/reviewer/queue", summary="Alias: Get reviewable proposals for authorized reviewers & admins")
 async def list_review_queue(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -209,12 +206,27 @@ async def get_proposal_reviews(
 
 
 @router.post("/{proposal_id}/reviews", summary="Create/update review draft or submit official review")
+@router.post("/{proposal_id}/review", summary="Alias: Create/update review draft or submit official review")
 async def upsert_proposal_review(
     proposal_id: str,
     data: ReviewUpsertRequest,
     current_user: dict = Depends(get_current_user),
 ):
     return await proposal_service.upsert_review(proposal_id, data, current_user)
+
+
+@router.get("/{proposal_id}/review-history", summary="Get proposal evaluation review history")
+@router.get("/{proposal_id}/reviews/history", summary="Alias: Get proposal evaluation review history")
+async def get_proposal_review_history(
+    proposal_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    detail = await proposal_service.get_proposal_by_id(proposal_id, current_user)
+    return {
+        "reviews": detail.get("reviews", []),
+        "reviewHistory": detail.get("reviewHistory", []),
+        "reviewSummary": detail.get("reviewSummary", {}),
+    }
 
 
 @router.get("/{proposal_id}/status-history", summary="Get proposal status history")
@@ -230,6 +242,7 @@ async def get_proposal_status_history(
 
 
 @router.post("/{proposal_id}/status", summary="Change proposal status through controlled workflow")
+@router.patch("/{proposal_id}/status", summary="Alias: Update proposal status through controlled workflow")
 async def change_proposal_status(
     proposal_id: str,
     data: StatusTransitionRequest,

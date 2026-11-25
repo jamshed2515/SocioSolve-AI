@@ -25,18 +25,29 @@
 | GET | `/api/proposals/my` | Get current user's / team's proposals & drafts |
 | GET | `/api/proposals/review-queue` | Get reviewable proposals for authorized reviewers & admins |
 | GET | `/api/proposals/challenges/published` | List published societal challenges eligible for proposals |
-| GET | `/api/proposals/rubric-criteria` | Get 5-criterion grading rubric configuration |
+| GET | `/api/proposals/meta/rubric` | Get 5-criterion grading rubric (20 pts each, total 100 pts) |
+| GET | `/api/proposals/meta/challenges` | Get published challenges metadata |
+| GET | `/api/proposals/meta/my-teams` | Get user's active collaborative teams |
 | POST | `/api/proposals` | Create a new proposal (Draft or immediate Submit) |
 | GET | `/api/proposals/{id}` | Get full proposal details, evaluation scorecard & status history |
-| PUT | `/api/proposals/{id}` | Update a draft proposal |
+| PUT | `/api/proposals/{id}` | Update a draft/withdrawn proposal (locks when accepted/rejected) |
 | DELETE | `/api/proposals/{id}` | Delete a draft proposal |
-| POST | `/api/proposals/{id}/submit` | Validate & submit a draft proposal for evaluation |
-| POST | `/api/proposals/{id}/withdraw` | Withdraw a submitted proposal before review decision |
-| GET | `/api/proposals/{id}/reviews` | Get reviewer evaluations & aggregate rubric scores |
-| POST | `/api/proposals/{id}/reviews` | Save review draft or submit official rubric evaluation |
+| POST | `/api/proposals/{id}/submit` | Validate & submit a draft or withdrawn proposal |
+| POST | `/api/proposals/{id}/withdraw` | Withdraw a submitted proposal for revisions |
+| POST | `/api/proposals/{id}/review` | Submit reviewer evaluation with 100-pt rubric & recommendation |
+| GET | `/api/proposals/{id}/review-history` | Get immutable historical audit log of all evaluation revisions |
+| PATCH | `/api/proposals/{id}/status` | Transition status (`under_review`, `accepted`, `rejected`) |
 | GET | `/api/proposals/{id}/status-history` | Get chronological status workflow audit trail |
-| POST | `/api/proposals/{id}/status` | Transition status (`Under Review`, `Accepted`, `Rejected`) |
 | POST | `/api/proposals/upload-document` | Upload supporting documents & implementation plans |
+
+### Module 4 Evaluation Rubric (100-Point Scale)
+
+1. **Innovation & Originality** (Max: 20 points)
+2. **Technical Feasibility** (Max: 20 points)
+3. **Societal Impact** (Max: 20 points)
+4. **Implementation Strategy** (Max: 20 points)
+5. **Scalability & Sustainability** (Max: 20 points)
+*Total Maximum Score: 100 points* | *Role restricted to:* `university`, `industry`, `admin`
 
 ---
 

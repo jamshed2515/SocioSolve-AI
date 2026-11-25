@@ -39,37 +39,37 @@ VALID_STATUS_TRANSITIONS: Dict[ProposalStatus, List[ProposalStatus]] = {
 }
 
 
-# Structured evaluation rubric criteria (configurable max score = 10 per criterion)
+# Structured evaluation rubric criteria (5 criteria x 20 points = 100 points maximum)
 DEFAULT_RUBRIC_CRITERIA = [
     {
         "key": "innovation",
-        "label": "Innovation & Originality",
+        "label": "Innovation and Originality",
         "description": "Uniqueness of the proposed approach and creative use of technology or methodology.",
-        "maxScore": 10,
+        "maxScore": 20,
     },
     {
         "key": "feasibility",
-        "label": "Feasibility",
-        "description": "Practicality of the implementation plan, timeline, and resource requirements.",
-        "maxScore": 10,
-    },
-    {
-        "key": "technical_quality",
-        "label": "Technical Quality",
-        "description": "Soundness of the technical architecture, prototype readiness, and engineering rigor.",
-        "maxScore": 10,
+        "label": "Technical Feasibility",
+        "description": "Practicality of the implementation plan, engineering soundness, and resource requirements.",
+        "maxScore": 20,
     },
     {
         "key": "societal_impact",
         "label": "Societal Impact",
-        "description": "Measurable benefit to target communities and alignment with the societal challenge.",
-        "maxScore": 10,
+        "description": "Measurable benefit to target communities, civic value, and alignment with the challenge.",
+        "maxScore": 20,
     },
     {
-        "key": "sustainability",
-        "label": "Sustainability & Scalability",
-        "description": "Long-term viability, maintainability, and potential to scale across regions or institutions.",
-        "maxScore": 10,
+        "key": "implementation_strategy",
+        "label": "Implementation Strategy",
+        "description": "Milestones, deployment roadmap, prototype readiness, and risk management.",
+        "maxScore": 20,
+    },
+    {
+        "key": "scalability",
+        "label": "Scalability and Sustainability",
+        "description": "Long-term viability, maintainability, financial model, and multi-region scalability.",
+        "maxScore": 20,
     },
 ]
 
@@ -142,7 +142,7 @@ def new_proposal_document(
         "reviewSummary": {
             "reviewCount": 0,
             "totalScore": 0.0,
-            "maxTotalScore": 50.0,
+            "maxTotalScore": 100.0,
             "averageScore": 0.0,
             "percentageScore": 0.0,
             "latestFeedback": None,
@@ -173,7 +173,7 @@ def new_review_document(
     total_score = round(sum(float(item.get("score", 0)) for item in criteria_scores), 2)
     count = len(criteria_scores) or 1
     average_score = round(total_score / count, 2)
-    max_total = round(sum(float(item.get("maxScore", 10)) for item in criteria_scores), 2) or 50.0
+    max_total = round(sum(float(item.get("maxScore", 20)) for item in criteria_scores), 2) or 100.0
     percentage_score = round((total_score / max_total) * 100, 1)
 
     return {
@@ -192,6 +192,41 @@ def new_review_document(
         "submittedAt": now if status == ReviewStatus.SUBMITTED else None,
         "createdAt": now,
         "updatedAt": now,
+    }
+
+
+def new_review_history_document(
+    *,
+    proposal_id: str,
+    review_id: str,
+    reviewer_id: str,
+    reviewer_name: str,
+    reviewer_role: str,
+    criteria_scores: List[Dict[str, Any]],
+    total_score: float,
+    max_total_score: float,
+    average_score: float,
+    percentage_score: float,
+    overall_feedback: str,
+    recommendation: str,
+    action: str = "evaluation_submitted",
+) -> dict:
+    """Build an immutable evaluation review history record for audit trail."""
+    return {
+        "proposalId": proposal_id,
+        "reviewId": review_id,
+        "reviewerId": reviewer_id,
+        "reviewerName": reviewer_name,
+        "reviewerRole": reviewer_role,
+        "criteriaScores": criteria_scores,
+        "totalScore": total_score,
+        "maxTotalScore": max_total_score,
+        "averageScore": average_score,
+        "percentageScore": percentage_score,
+        "overallFeedback": overall_feedback.strip(),
+        "recommendation": recommendation,
+        "action": action,
+        "timestamp": datetime.now(timezone.utc),
     }
 
 
