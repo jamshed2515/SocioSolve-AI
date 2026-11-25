@@ -8,7 +8,11 @@ import {
   Trash2,
   RotateCcw,
   ExternalLink,
+<<<<<<< Updated upstream
   GitBranch,
+=======
+  Link2,
+>>>>>>> Stashed changes
   Globe,
   FileText,
   Users,
@@ -578,7 +582,11 @@ export default function ProposalDetailsPage() {
                     className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition"
                   >
                     <div className="flex items-center gap-3 min-w-0">
+<<<<<<< Updated upstream
                       <GitBranch size={18} className="text-white shrink-0" />
+=======
+                      <Link2 size={18} className="text-white shrink-0" />
+>>>>>>> Stashed changes
                       <div className="truncate">
                         <p className="text-xs font-semibold text-white">GitHub Source Repository</p>
                         <p className="text-xs text-primary-300 truncate">{proposal.githubUrl}</p>

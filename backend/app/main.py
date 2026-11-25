@@ -54,14 +54,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
-# ── Static files (uploaded avatars & proposal documents) ───────────────────
+# ── Static files (public avatars only; proposal documents are served via authenticated API) ──
 os.makedirs("uploads/avatars", exist_ok=True)
 os.makedirs("uploads/proposals", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads/avatars", StaticFiles(directory="uploads/avatars"), name="avatars")
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/api/users", tags=["Users"])

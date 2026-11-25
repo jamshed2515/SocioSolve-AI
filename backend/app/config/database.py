@@ -47,14 +47,18 @@ async def create_indexes():
         "expires_at", expireAfterSeconds=0
     )  # TTL index – auto-delete expired tokens
 
-    # Module 4 – Proposals, Reviews & Status History indexes
+    # Module 4 – Proposals, Reviews, Documents & Status History indexes
     await db.proposals.create_index("proposalCode", unique=True)
     await db.proposals.create_index("challengeId")
     await db.proposals.create_index("authorId")
+    await db.proposals.create_index("verifiedMemberIds")
     await db.proposals.create_index("status")
     await db.proposals.create_index("createdAt")
     await db.proposal_reviews.create_index([("proposalId", 1), ("reviewerId", 1)], unique=True)
+    await db.proposal_review_history.create_index([("proposalId", 1), ("timestamp", 1)])
     await db.proposal_status_history.create_index([("proposalId", 1), ("timestamp", 1)])
+    await db.proposal_documents.create_index("proposalId")
+    await db.proposal_documents.create_index("uploadedBy")
     await db.notifications.create_index([("userId", 1), ("createdAt", -1)])
     logger.info("✅ Database indexes created.")
 

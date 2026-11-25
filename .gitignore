@@ -19,6 +19,11 @@ backend/secrets/
 *service-account*.json
 *-firebase-adminsdk-*.json
 
+# ── Secrets (Firebase service account etc.) ──
+backend/secrets/
+*firebase-adminsdk*.json
+*service-account*.json
+
 # ── Uploads (user files) ──────────────────────
 backend/uploads/
 

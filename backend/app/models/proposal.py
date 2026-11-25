@@ -1,6 +1,6 @@
 """
-Proposal, Review, and Status History document models for MongoDB (Module 4).
-Defines enums, controlled workflow transitions, rubric criteria, and document builders.
+Proposal, Review, Document, and Status History document models for MongoDB (Module 4).
+Defines enums, controlled workflow transitions, authoritative rubric criteria, and document builders.
 """
 from enum import Enum
 from typing import Optional, List, Dict, Any
@@ -39,39 +39,58 @@ VALID_STATUS_TRANSITIONS: Dict[ProposalStatus, List[ProposalStatus]] = {
 }
 
 
-# Structured evaluation rubric criteria (5 criteria x 20 points = 100 points maximum)
-DEFAULT_RUBRIC_CRITERIA = [
+# Backend-authoritative evaluation rubric criteria (5 criteria x 1-10 points = 50 points maximum)
+RUBRIC_MIN_SCORE = 1.0
+RUBRIC_MAX_SCORE = 10.0
+
+DEFAULT_RUBRIC_CRITERIA: List[Dict[str, Any]] = [
     {
         "key": "innovation",
         "label": "Innovation and Originality",
         "description": "Uniqueness of the proposed approach and creative use of technology or methodology.",
-        "maxScore": 20,
+        "minScore": int(RUBRIC_MIN_SCORE),
+        "maxScore": int(RUBRIC_MAX_SCORE),
     },
     {
         "key": "feasibility",
-        "label": "Technical Feasibility",
-        "description": "Practicality of the implementation plan, engineering soundness, and resource requirements.",
-        "maxScore": 20,
+        "label": "Feasibility",
+        "description": "Practicality of the implementation plan, timeline realism, and resource requirements.",
+        "minScore": int(RUBRIC_MIN_SCORE),
+        "maxScore": int(RUBRIC_MAX_SCORE),
+    },
+    {
+        "key": "technical_quality",
+        "label": "Technical Quality",
+        "description": "Engineering soundness, system architecture, security, and prototype readiness.",
+        "minScore": int(RUBRIC_MIN_SCORE),
+        "maxScore": int(RUBRIC_MAX_SCORE),
     },
     {
         "key": "societal_impact",
         "label": "Societal Impact",
         "description": "Measurable benefit to target communities, civic value, and alignment with the challenge.",
-        "maxScore": 20,
-    },
-    {
-        "key": "implementation_strategy",
-        "label": "Implementation Strategy",
-        "description": "Milestones, deployment roadmap, prototype readiness, and risk management.",
-        "maxScore": 20,
+        "minScore": int(RUBRIC_MIN_SCORE),
+        "maxScore": int(RUBRIC_MAX_SCORE),
     },
     {
         "key": "scalability",
-        "label": "Scalability and Sustainability",
+        "label": "Sustainability and Scalability",
         "description": "Long-term viability, maintainability, financial model, and multi-region scalability.",
-        "maxScore": 20,
+        "minScore": int(RUBRIC_MIN_SCORE),
+        "maxScore": int(RUBRIC_MAX_SCORE),
     },
 ]
+
+RUBRIC_CRITERIA_BY_KEY: Dict[str, Dict[str, Any]] = {
+    c["key"]: c for c in DEFAULT_RUBRIC_CRITERIA
+}
+
+# Backward-compatible alias for legacy frontend criterion key
+RUBRIC_KEY_ALIASES: Dict[str, str] = {
+    "implementation_strategy": "technical_quality",
+}
+
+RUBRIC_MAX_TOTAL_SCORE: float = float(sum(c["maxScore"] for c in DEFAULT_RUBRIC_CRITERIA))
 
 
 def generate_proposal_code() -> str:
@@ -102,6 +121,7 @@ def new_proposal_document(
     team_id: Optional[str] = None,
     team_name: Optional[str] = None,
     team_members: Optional[List[Dict[str, Any]]] = None,
+    verified_member_ids: Optional[List[str]] = None,
     prototype_url: Optional[str] = None,
     github_url: Optional[str] = None,
     demo_url: Optional[str] = None,
@@ -123,8 +143,9 @@ def new_proposal_document(
         "authorEmail": author_email,
         "authorRole": author_role,
         "teamId": team_id,
-        "teamName": team_name or "",
+        "teamName": (team_name or "").strip(),
         "teamMembers": team_members or [],
+        "verifiedMemberIds": sorted({str(uid) for uid in (verified_member_ids or []) if uid}),
         "problemUnderstanding": problem_understanding.strip(),
         "proposedSolution": proposed_solution.strip(),
         "innovationUniqueness": innovation_uniqueness.strip(),
@@ -142,7 +163,7 @@ def new_proposal_document(
         "reviewSummary": {
             "reviewCount": 0,
             "totalScore": 0.0,
-            "maxTotalScore": 100.0,
+            "maxTotalScore": RUBRIC_MAX_TOTAL_SCORE,
             "averageScore": 0.0,
             "percentageScore": 0.0,
             "latestFeedback": None,
@@ -168,13 +189,16 @@ def new_review_document(
     recommendation: ReviewRecommendation,
     status: ReviewStatus = ReviewStatus.DRAFT,
 ) -> dict:
-    """Build a structured evaluation review document for a proposal."""
+    """
+    Build a structured evaluation review document for a proposal.
+    Scores and max scores are strictly computed from backend-validated criteria.
+    """
     now = datetime.now(timezone.utc)
-    total_score = round(sum(float(item.get("score", 0)) for item in criteria_scores), 2)
+    total_score = round(sum(float(item["score"]) for item in criteria_scores), 2)
     count = len(criteria_scores) or 1
     average_score = round(total_score / count, 2)
-    max_total = round(sum(float(item.get("maxScore", 20)) for item in criteria_scores), 2) or 100.0
-    percentage_score = round((total_score / max_total) * 100, 1)
+    max_total = RUBRIC_MAX_TOTAL_SCORE
+    percentage_score = round((total_score / max_total) * 100, 1) if max_total else 0.0
 
     return {
         "proposalId": proposal_id,
@@ -252,4 +276,34 @@ def new_status_history_document(
         "comment": (comment or "").strip() or None,
         "scoreSnapshot": score_snapshot,
         "timestamp": datetime.now(timezone.utc),
+    }
+
+
+def new_proposal_document_record(
+    *,
+    original_name: str,
+    stored_filename: str,
+    content_type: str,
+    doc_type: str,
+    size_bytes: int,
+    uploaded_by: str,
+    storage_provider: str = "local",
+    storage_path: Optional[str] = None,
+    cloudinary_url: Optional[str] = None,
+    proposal_id: Optional[str] = None,
+) -> dict:
+    """Build a protected uploaded document metadata record for MongoDB."""
+    now = datetime.now(timezone.utc)
+    return {
+        "originalName": original_name,
+        "storedFilename": stored_filename,
+        "contentType": content_type or "application/octet-stream",
+        "docType": doc_type or "supporting_document",
+        "sizeBytes": size_bytes,
+        "uploadedBy": uploaded_by,
+        "proposalId": proposal_id,
+        "storageProvider": storage_provider,
+        "storagePath": storage_path,
+        "cloudinaryUrl": cloudinary_url,
+        "createdAt": now,
     }
