@@ -2,6 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
 
+// Public marketing pages
+import Landing from "./pages/public/Landing";
+import About   from "./pages/public/About";
+import Contact from "./pages/public/Contact";
+
 // Auth pages
 import Login          from "./pages/auth/Login";
 import Register       from "./pages/auth/Register";
@@ -69,7 +74,9 @@ export default function App() {
 
         <Routes>
           {/* ── Public routes ──────────────────────────────── */}
-          <Route path="/"                 element={<Navigate to="/login" replace />} />
+          <Route path="/"                 element={<Landing />} />
+          <Route path="/about"            element={<About />} />
+          <Route path="/contact"          element={<Contact />} />
           <Route path="/login"            element={<Login />} />
           <Route path="/register"         element={<Register />} />
           <Route path="/forgot-password"  element={<ForgotPassword />} />
@@ -152,7 +159,7 @@ export default function App() {
           </Route>
 
           {/* ── 404 fallback ───────────────────────────────── */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
