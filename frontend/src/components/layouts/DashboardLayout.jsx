@@ -22,43 +22,40 @@ import proposalService from "../../services/proposalService";
 const NAV_ITEMS = {
   citizen: [
     { to: "/dashboard/citizen", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/challenges/new", icon: PlusCircle, label: "Report Problem" },
+    { to: "/my-challenges", icon: Layers, label: "My Reported Issues" },
     { to: "/challenges", icon: Compass, label: "Explore Challenges" },
-    { to: "/my-challenges", icon: Layers, label: "My Challenges" },
-    { to: "/challenges/new", icon: PlusCircle, label: "Submit Challenge" },
-    { to: "/proposals", icon: FileText, label: "Proposals Hub" },
-    { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
-    { to: "/proposals/new", icon: PlusCircle, label: "Submit Proposal" },
   ],
   student: [
     { to: "/dashboard/student", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/challenges", icon: Compass, label: "Explore Challenges" },
-    { to: "/my-challenges", icon: Layers, label: "My Challenges" },
-    { to: "/proposals", icon: FileText, label: "Proposals Hub" },
-    { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
+    { to: "/teams", icon: Users, label: "Team Collaboration" },
     { to: "/proposals/new", icon: PlusCircle, label: "Submit Proposal" },
+    { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
+    { to: "/proposals", icon: FileText, label: "Proposals Hub" },
   ],
   university: [
     { to: "/dashboard/university", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
-    { to: "/proposals", icon: FileText, label: "Proposals Hub" },
-    { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
-    { to: "/proposals/new", icon: PlusCircle, label: "Submit Proposal" },
     { to: "/proposals/review-queue", icon: ClipboardCheck, label: "Review Queue" },
+    { to: "/proposals", icon: FileText, label: "Proposals Hub" },
+    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
+    { to: "/teams", icon: Users, label: "Student Teams" },
   ],
   industry: [
     { to: "/dashboard/industry", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
-    { to: "/proposals", icon: FileText, label: "Proposals Hub" },
     { to: "/proposals/review-queue", icon: ClipboardCheck, label: "Review Queue" },
+    { to: "/proposals", icon: FileText, label: "Proposals Hub" },
+    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
+    { to: "/teams", icon: Users, label: "Team Collaboration" },
   ],
   admin: [
     { to: "/dashboard/admin", icon: LayoutDashboard, label: "Dashboard" },
     { to: "/challenges", icon: Compass, label: "Explore Challenges" },
-    { to: "/my-challenges", icon: Layers, label: "My Challenges" },
+    { to: "/my-challenges", icon: Layers, label: "Manage Challenges" },
     { to: "/challenges/new", icon: PlusCircle, label: "Submit Challenge" },
     { to: "/proposals", icon: FileText, label: "Proposals Hub" },
     { to: "/proposals/review-queue", icon: ClipboardCheck, label: "Review Queue" },
-    { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
+    { to: "/teams", icon: Users, label: "Teams Oversight" },
   ],
 };
 
@@ -159,33 +156,29 @@ export default function DashboardLayout({ children, title }) {
 
         {/* Nav */}
         <nav className="flex-1 p-4 space-y-1">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <Link
-              key={to}
-              to={to}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
-                ${
-                  location.pathname === to || (to === "/my-challenges" && location.pathname === "/challenges/my")
-                    ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                    : "text-white/50 hover:text-white hover:bg-white/5"
-                }`}
-            >
-              <Icon size={18} />
-              {label}
-            </Link>
-          ))}
-          <Link
-            to="/teams"
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
-              ${
-                location.pathname.startsWith("/teams")
-                  ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
-                  : "text-white/50 hover:text-white hover:bg-white/5"
-              }`}
-          >
-            <Users size={18} />
-            Team Collaboration
-          </Link>
+          {navItems.map(({ to, icon: Icon, label }) => {
+            const isActive =
+              location.pathname === to ||
+              (to === "/my-challenges" && (location.pathname === "/challenges/my" || location.pathname === "/my-challenges")) ||
+              (to === "/teams" && location.pathname.startsWith("/teams")) ||
+              (to === "/proposals/review-queue" && location.pathname.startsWith("/proposals/review-queue"));
+
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
+                  ${
+                    isActive
+                      ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
+                      : "text-white/50 hover:text-white hover:bg-white/5"
+                  }`}
+              >
+                <Icon size={18} />
+                {label}
+              </Link>
+            );
+          })}
           <Link
             to="/profile"
             className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
