@@ -66,6 +66,11 @@ def _load_admin_credential():
     if path:
         if os.path.isfile(path):
             return credentials.Certificate(path), path
+        # Also check relative to backend directory or project root
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        alt_path = os.path.join(base_dir, path.lstrip("./").lstrip(".\\"))
+        if os.path.isfile(alt_path):
+            return credentials.Certificate(alt_path), alt_path
         if not settings.DEBUG:
             raise RuntimeError(f"FIREBASE_SERVICE_ACCOUNT_PATH not found: {path}")
         return None, f"key file not found at {path}"

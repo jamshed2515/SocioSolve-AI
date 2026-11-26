@@ -16,6 +16,7 @@ from app.routes.auth_routes import router as auth_router
 from app.routes.user_routes import router as user_router
 from app.routes.proposal_routes import router as proposal_router
 from app.modules.team_collaboration.router import router as team_collaboration_router
+from app.modules.team_collaboration.routers.join_request_router import router as join_request_router
 from app.routes.admin_routes import router as admin_router
 from app.routes.dashboard_routes import router as dashboard_router
 
@@ -49,13 +50,13 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Bearer tokens only (no auth cookies) -> credentials not needed
+# Bearer tokens & cross-origin frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_origins=settings.allowed_origins_list or ["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ── Static files (uploaded avatars & proposal documents) ───────────────────
@@ -74,6 +75,11 @@ app.include_router(
     team_collaboration_router,
     prefix="/api/team-collaboration",
     tags=["Module 3 – Team Collaboration"],
+)
+app.include_router(
+    join_request_router,
+    prefix="/api/join-requests",
+    tags=["Module 3 – Join Requests"],
 )
 app.include_router(
     proposal_router,

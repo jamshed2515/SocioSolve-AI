@@ -18,7 +18,8 @@ from app.modules.team_collaboration.schemas.team_schema import (
     TeamResponse,
     TeamUpdate,
 )
-from app.modules.team_collaboration.services import team_service
+from app.modules.team_collaboration.schemas.join_request_schema import JoinRequestListResponse
+from app.modules.team_collaboration.services import team_service, join_request_service
 from app.modules.team_collaboration.services.database_service import (
     check_database_readiness,
 )
@@ -187,3 +188,23 @@ async def delete_team(
     db = get_database()
     user_id = str(current_user["_id"])
     return await team_service.delete_team(db, team_id=team_id, user_id=user_id)
+
+
+# ── Get Requests for a Team (Phase 3) ────────────────────────────────────────
+@router.get(
+    "/{team_id}/join-requests",
+    response_model=JoinRequestListResponse,
+    summary="Get join requests for a team (Leader only)",
+    tags=["Module 3 – Teams"],
+)
+async def get_team_join_requests(
+    team_id: str,
+    status: Optional[str] = Query(None, description="Filter by status (pending, accepted, rejected, cancelled)"),
+    current_user: dict = Depends(get_current_user),
+) -> JoinRequestListResponse:
+    """Retrieve join requests for a specific team. Restricted to the team leader."""
+    db = get_database()
+    leader_user_id = str(current_user["_id"])
+    return await join_request_service.get_team_join_requests(
+        db=db, team_id=team_id, leader_user_id=leader_user_id, status_filter=status
+    )

@@ -56,6 +56,16 @@ async def create_indexes():
     await db.proposal_reviews.create_index([("proposalId", 1), ("reviewerId", 1)], unique=True)
     await db.proposal_status_history.create_index([("proposalId", 1), ("timestamp", 1)])
     await db.notifications.create_index([("userId", 1), ("createdAt", -1)])
+
+    # Module 3 – Teams & Join Requests indexes
+    try:
+        from app.modules.team_collaboration.models.team_model import create_team_indexes
+        from app.modules.team_collaboration.models.join_request_model import create_join_request_indexes
+        await create_team_indexes(db)
+        await create_join_request_indexes(db)
+    except Exception as m3_err:
+        logger.warning("Could not initialize Module 3 indexes: %s", m3_err)
+
     logger.info("✅ Database indexes created.")
 
 

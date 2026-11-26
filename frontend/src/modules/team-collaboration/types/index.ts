@@ -35,8 +35,48 @@ export interface Team {
   status: TeamStatus;
   is_leader?: boolean;
   is_member?: boolean;
+  user_request_status?: JoinRequestStatus | null;
+  user_request_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type JoinRequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
+
+export interface JoinRequest {
+  id: string;
+  team_id: string;
+  team_name?: string;
+  team_status?: TeamStatus;
+  challenge_title?: string;
+  leader_id?: string;
+  leader_name?: string;
+  member_count?: number;
+  max_members?: number;
+  user_id: string;
+  applicant_name?: string;
+  applicant_email?: string;
+  applicant_profile_image?: string | null;
+  applicant_skills?: string[];
+  applicant_role?: string;
+  message?: string | null;
+  status: JoinRequestStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JoinRequestListResponse {
+  requests: JoinRequest[];
+  total: number;
+}
+
+export interface CreateJoinRequestPayload {
+  team_id: string;
+  message?: string;
+}
+
+export interface JoinRequestDecisionPayload {
+  decision: "accepted" | "rejected";
 }
 
 export interface TeamListResponse {

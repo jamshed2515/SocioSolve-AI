@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarClock,
   CheckSquare,
+  Clock,
   Compass,
   LayoutDashboard,
   LogIn,
@@ -35,6 +36,7 @@ const TEAM_NAV_ITEMS: TeamNavItem[] = [
   { to: "/teams", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/teams/my-teams", label: "My Teams", icon: Users },
   { to: "/teams/explore", label: "Explore Teams", icon: Compass },
+  { to: "/teams/requests", label: "My Applications", icon: Clock },
   { to: "/teams/invitations", label: "Invitations", icon: Mail, badge: "2" },
   { to: "/teams/discussions", label: "Discussions", icon: MessageSquare },
   { to: "/teams/tasks", label: "My Tasks", icon: CheckSquare },
@@ -57,6 +59,10 @@ const ROUTE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/teams/explore": {
     title: "Explore Teams",
     subtitle: "Discover active innovation teams seeking collaborators and mentors",
+  },
+  "/teams/requests": {
+    title: "My Applications",
+    subtitle: "Track your join requests to innovation teams across Jharkhand",
   },
   "/teams/invitations": {
     title: "Invitations",
