@@ -787,3 +787,131 @@ def test_challenge_fastapi_client_endpoints(monkeypatch):
 
     app.dependency_overrides.clear()
 
+
+def test_challenge_security_and_error_handling():
+    """Verify security boundaries, role permissions, and HTTP error handling."""
+    db = InMemoryDB()
+    challenge_service.get_database = lambda: db
+    db_config.get_database = lambda: db
+
+    citizen_user = {
+        "_id": ObjectId("6745f1a2b3c4d5e6f7a8b901"),
+        "name": "Citizen User",
+        "email": "citizen@example.com",
+        "role": "citizen",
+        "is_active": True,
+    }
+    stranger_user = {
+        "_id": ObjectId("6745f1a2b3c4d5e6f7a8b902"),
+        "name": "Stranger User",
+        "email": "stranger@example.com",
+        "role": "student",
+        "is_active": True,
+    }
+    admin_user = {
+        "_id": ObjectId("6745f1a2b3c4d5e6f7a8b999"),
+        "name": "Admin User",
+        "email": "admin@example.com",
+        "role": "admin",
+        "is_active": True,
+    }
+
+    client = TestClient(app)
+
+    # 1. 401 Unauthorized: Calling POST without authentication
+    res_unauth_post = client.post(
+        "/api/challenges",
+        json={
+            "title": "Unauthenticated Challenge",
+            "description": "Should fail with 401 or 403 because no Bearer token provided.",
+            "category": "Healthcare",
+            "location": "Delhi",
+        },
+    )
+    assert res_unauth_post.status_code in {401, 403}
+
+    # 2. 401 Unauthorized: Calling GET /api/challenges/my without authentication
+    res_unauth_my = client.get("/api/challenges/my")
+    assert res_unauth_my.status_code in {401, 403}
+
+    # Authenticate as citizen
+    app.dependency_overrides[require_active_user] = lambda: citizen_user
+    app.dependency_overrides[get_current_user] = lambda: citizen_user
+
+    # 3. 422 Validation Error: Title too short (<5 chars)
+    res_short_title = client.post(
+        "/api/challenges",
+        json={
+            "title": "Hi",
+            "description": "Description long enough to satisfy constraint but title too short.",
+            "category": "Healthcare",
+            "location": "Mumbai",
+        },
+    )
+    assert res_short_title.status_code == 422
+
+    # 4. 422 Validation Error: Description too short (<20 chars)
+    res_short_desc = client.post(
+        "/api/challenges",
+        json={
+            "title": "Valid Challenge Title Here",
+            "description": "Too short",
+            "category": "Healthcare",
+            "location": "Mumbai",
+        },
+    )
+    assert res_short_desc.status_code == 422
+
+    # Create valid challenge
+    res_created = client.post(
+        "/api/challenges",
+        json={
+            "title": "Solar Powered Cold Storage Units",
+            "description": "Prevent post-harvest crop spoilage for smallholder tomato farmers.",
+            "category": "Agriculture",
+            "location": "Nashik, Maharashtra",
+            "status": "submitted",
+        },
+    )
+    assert res_created.status_code == 201
+    ch_id = res_created.json()["id"]
+
+    # 5. 404 Not Found on invalid ID
+    res_not_found = client.get("/api/challenges/6745f1a2b3c4d5e6f7a8b999")
+    assert res_not_found.status_code == 404
+
+    # Switch identity to Stranger
+    app.dependency_overrides[require_active_user] = lambda: stranger_user
+    app.dependency_overrides[get_current_user] = lambda: stranger_user
+
+    # 6. 403 Forbidden: Stranger tries to update citizen's challenge
+    res_forbidden_put = client.put(
+        f"/api/challenges/{ch_id}",
+        json={"title": "Hacked Title Attempt"},
+    )
+    assert res_forbidden_put.status_code == 403
+
+    # 7. 403 Forbidden: Stranger tries to delete citizen's challenge
+    res_forbidden_del = client.delete(f"/api/challenges/{ch_id}")
+    assert res_forbidden_del.status_code == 403
+
+    # Switch identity to Admin
+    app.dependency_overrides[require_active_user] = lambda: admin_user
+    app.dependency_overrides[get_current_user] = lambda: admin_user
+
+    # 8. Admin can transition status to published
+    res_admin_status = client.patch(
+        f"/api/challenges/{ch_id}/status",
+        json={"status": "published", "reason": "Verified community submission"},
+    )
+    assert res_admin_status.status_code == 200
+    assert res_admin_status.json()["status"] == "published"
+    assert res_admin_status.json()["isPublished"] is True
+
+    # 9. Anonymous public user can discover the published challenge
+    app.dependency_overrides.clear()
+    res_public = client.get(f"/api/challenges/{ch_id}")
+    assert res_public.status_code == 200
+    assert res_public.json()["id"] == ch_id
+
+
