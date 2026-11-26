@@ -5,25 +5,30 @@ import {
   AlertTriangle,
   ArrowLeft,
   Calendar,
+  Check,
   CheckCircle2,
   Clock,
   Compass,
   Crown,
   Edit3,
+  Inbox,
   Layers,
   Loader2,
   MessageSquare,
+  Send,
   Trash2,
   UserCheck,
   Users,
+  X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuth } from "../../../context/AuthContext";
 import EditTeamModal from "../components/EditTeamModal";
+import RequestToJoinModal from "../components/RequestToJoinModal";
 import teamApi from "../services/teamApi";
-import type { AuthUser, Team } from "../types";
+import type { AuthUser, JoinRequest, Team } from "../types";
 
-type DetailTab = "overview" | "members" | "discussions" | "tasks" | "meetings";
+type DetailTab = "overview" | "members" | "requests" | "discussions" | "tasks" | "meetings";
 
 const STATUS_BADGE: Record<string, string> = {
   recruiting: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
@@ -49,6 +54,16 @@ export default function TeamDetails() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Join Request states
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [isCancellingJoin, setIsCancellingJoin] = useState(false);
+
+  // Leader Received Requests state
+  const [teamRequests, setTeamRequests] = useState<JoinRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestFilter, setRequestFilter] = useState<string>("pending");
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+
   const fetchTeam = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -72,6 +87,26 @@ export default function TeamDetails() {
     void fetchTeam();
   }, [fetchTeam]);
 
+  // Load team join requests if leader
+  const fetchTeamRequests = useCallback(async () => {
+    if (!id) return;
+    setLoadingRequests(true);
+    try {
+      const res = await teamApi.getTeamJoinRequests(id);
+      setTeamRequests(res.requests || []);
+    } catch {
+      // Non-leader or error
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (team?.is_leader) {
+      void fetchTeamRequests();
+    }
+  }, [team?.is_leader, fetchTeamRequests]);
+
   // Handle Team Deletion
   const handleDeleteConfirm = async () => {
     if (!team || isDeleting) return;
@@ -89,6 +124,54 @@ export default function TeamDetails() {
     } finally {
       setIsDeleting(false);
       setIsDeleteOpen(false);
+    }
+  };
+
+  // Handle Cancel Join Request by applicant
+  const handleCancelJoinRequest = async () => {
+    if (!team?.user_request_id || isCancellingJoin) return;
+    setIsCancellingJoin(true);
+    try {
+      await teamApi.cancelJoinRequest(team.user_request_id);
+      toast.success("Join request cancelled.");
+      setTeam((prev) =>
+        prev
+          ? { ...prev, user_request_status: "cancelled", user_request_id: null }
+          : null
+      );
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to cancel join request.";
+      toast.error(msg);
+    } finally {
+      setIsCancellingJoin(false);
+    }
+  };
+
+  // Leader Decision on Request
+  const handleLeaderDecision = async (
+    requestId: string,
+    decision: "accepted" | "rejected"
+  ) => {
+    setDecidingId(requestId);
+    try {
+      await teamApi.decideJoinRequest(requestId, decision);
+      toast.success(
+        decision === "accepted"
+          ? "Applicant accepted! Member added to the team. 🎉"
+          : "Join request rejected."
+      );
+      // Refresh team details to show updated members and capacity
+      await fetchTeam();
+      await fetchTeamRequests();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to update join request.";
+      toast.error(msg);
+    } finally {
+      setDecidingId(null);
     }
   };
 
@@ -110,8 +193,8 @@ export default function TeamDetails() {
         </div>
         <h3 className="text-lg font-bold text-white">Team Not Found</h3>
         <p className="text-xs text-white/50 max-w-md mx-auto">{error || "This team may have been removed or does not exist."}</p>
-        <Link to="/teams/my-teams" className="btn-primary text-xs px-4 py-2 inline-flex items-center gap-2">
-          <ArrowLeft size={14} /> Back to My Teams
+        <Link to="/teams/explore" className="btn-primary text-xs px-4 py-2 inline-flex items-center gap-2">
+          <ArrowLeft size={14} /> Back to Explore Teams
         </Link>
       </div>
     );
@@ -120,6 +203,10 @@ export default function TeamDetails() {
   const isLeader =
     team.is_leader ||
     (user?.id && String(user.id) === String(team.leader_id));
+  const isMember = team.is_member;
+  const isPending = team.user_request_status === "pending";
+  const isFull = team.member_count >= (team.max_members || 6) || team.status === "full";
+  const canRequestJoin = team.status === "recruiting" && !isFull && !isLeader && !isMember && !isPending;
 
   const percent = Math.min(
     100,
@@ -136,39 +223,89 @@ export default function TeamDetails() {
     year: "numeric",
   });
 
+  const pendingRequestsCount = teamRequests.filter((r) => r.status === "pending").length;
+
+  const filteredTeamRequests = teamRequests.filter((r) => {
+    if (requestFilter === "all") return true;
+    return r.status === requestFilter;
+  });
+
   return (
     <div className="space-y-6 animate-fade-in pb-16">
       {/* ── Breadcrumb & Top Bar ─────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          to="/teams/my-teams"
+          to="/teams/explore"
           className="inline-flex items-center gap-2 text-xs font-medium text-white/50 hover:text-white transition"
         >
-          <ArrowLeft size={15} /> Back to My Teams
+          <ArrowLeft size={15} /> Back to Explore Teams
         </Link>
 
-        {isLeader && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {canRequestJoin && (
             <button
               type="button"
-              onClick={() => setIsEditOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white transition"
+              onClick={() => setIsJoinModalOpen(true)}
+              className="btn-primary text-xs px-4 py-2 shadow-lg shadow-primary-500/25 flex items-center gap-1.5"
             >
-              <Edit3 size={13} className="text-primary-300" /> Edit Team
+              <Send size={13} />
+              <span>Request to Join Team</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setIsDeleteOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-semibold text-red-300 transition"
-            >
-              <Trash2 size={13} className="text-red-400" /> Delete
-            </button>
-          </div>
-        )}
+          )}
+
+          {isLeader && (
+            <>
+              <button
+                type="button"
+                onClick={() => setIsEditOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white transition"
+              >
+                <Edit3 size={13} className="text-primary-300" /> Edit Team
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDeleteOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-semibold text-red-300 transition"
+              >
+                <Trash2 size={13} className="text-red-400" /> Delete
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
+      {/* ── Pending Request Banner for Applicant ─────────────────────── */}
+      {isPending && (
+        <div className="glass p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-200">
+          <div className="flex items-center gap-2.5">
+            <Clock size={18} className="text-amber-400 shrink-0" />
+            <span>
+              <strong>Application Pending:</strong> Your request to join this team has been submitted and is awaiting review by the team leader.
+            </span>
+          </div>
+          {team.user_request_id && (
+            <button
+              type="button"
+              disabled={isCancellingJoin}
+              onClick={handleCancelJoinRequest}
+              className="px-3 py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 font-semibold text-xs transition shrink-0 flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              {isCancellingJoin ? (
+                <>
+                  <Loader2 size={13} className="animate-spin" /> Cancelling...
+                </>
+              ) : (
+                <>
+                  <X size={13} /> Cancel Request
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Team Header Card ────────────────────────────────────────── */}
-      <div className="glass p-6 sm:p-8 bg-gradient-to-r from-primary-500/15 via-dark-700/60 to-accent-400/10 border-primary-500/25">
+      <div className="glass p-6 sm:p-8 bg-gradient-to-r from-primary-500/15 via-dark-700/60 to-accent-400/10 border-primary-500/25 rounded-2xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-2.5">
@@ -181,6 +318,11 @@ export default function TeamDetails() {
               {isLeader && (
                 <span className="badge text-xs bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 font-semibold">
                   <Crown size={12} className="text-amber-400" /> You are Team Leader
+                </span>
+              )}
+              {isMember && !isLeader && (
+                <span className="badge text-xs bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-semibold">
+                  <CheckCircle2 size={12} className="text-emerald-400" /> You are a Member
                 </span>
               )}
             </div>
@@ -199,7 +341,7 @@ export default function TeamDetails() {
           </div>
 
           {/* Quick Roster Stats Widget */}
-          <div className="glass p-5 bg-dark-800/80 border-white/10 shrink-0 w-full lg:w-72 space-y-3">
+          <div className="glass p-5 bg-dark-800/80 border-white/10 shrink-0 w-full lg:w-72 space-y-3 rounded-2xl">
             <div className="flex items-center justify-between text-xs text-white/50">
               <span>Team Capacity</span>
               <strong className="text-white font-bold text-sm">
@@ -248,6 +390,25 @@ export default function TeamDetails() {
           <Users size={15} /> Members ({team.member_count})
         </button>
 
+        {isLeader && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("requests")}
+            className={`px-4 py-3 text-xs sm:text-sm font-semibold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
+              activeTab === "requests"
+                ? "border-primary-400 text-primary-300 bg-white/[0.02]"
+                : "border-transparent text-white/50 hover:text-white"
+            }`}
+          >
+            <Inbox size={15} /> Join Requests
+            {pendingRequestsCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500 text-black font-bold">
+                {pendingRequestsCount}
+              </span>
+            )}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => setActiveTab("discussions")}
@@ -293,7 +454,7 @@ export default function TeamDetails() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* Mission Card */}
-            <div className="glass p-6 md:col-span-2 space-y-3">
+            <div className="glass p-6 md:col-span-2 space-y-3 rounded-2xl">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <CheckCircle2 size={18} className="text-accent-400" />
                 Team Scope & Mission
@@ -304,7 +465,7 @@ export default function TeamDetails() {
             </div>
 
             {/* Meta Attributes */}
-            <div className="glass p-6 space-y-4">
+            <div className="glass p-6 space-y-4 rounded-2xl">
               <h3 className="text-sm font-bold text-white pb-2 border-b border-white/10">
                 Governance & Stats
               </h3>
@@ -409,9 +570,175 @@ export default function TeamDetails() {
         </div>
       )}
 
+      {/* ── TAB: LEADER RECEIVED REQUESTS (PHASE 3) ─────────────────── */}
+      {isLeader && activeTab === "requests" && (
+        <div className="space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Inbox size={18} className="text-primary-400" /> Received Join Requests
+              </h3>
+              <p className="text-xs text-white/50">
+                Review and approve student applications to join {team.name}.
+              </p>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/5 border border-white/10 self-start sm:self-auto">
+              {(["pending", "all", "accepted", "rejected"] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setRequestFilter(st)}
+                  className={`px-3 py-1 text-xs rounded-lg font-medium transition capitalize ${
+                    requestFilter === st
+                      ? "bg-primary-500 text-white shadow-sm"
+                      : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loadingRequests && (
+            <div className="glass p-8 text-center space-y-2">
+              <Loader2 size={24} className="animate-spin mx-auto text-primary-400" />
+              <p className="text-xs text-white/50">Fetching applicant requests...</p>
+            </div>
+          )}
+
+          {!loadingRequests && filteredTeamRequests.length === 0 && (
+            <div className="glass p-10 text-center space-y-3 border-dashed border-white/15 rounded-2xl">
+              <Inbox size={28} className="mx-auto text-white/30" />
+              <h4 className="text-sm font-semibold text-white">No Join Requests</h4>
+              <p className="text-xs text-white/40 max-w-sm mx-auto">
+                {requestFilter === "pending"
+                  ? "There are currently no pending join requests for this team."
+                  : `No requests match the '${requestFilter}' filter.`}
+              </p>
+            </div>
+          )}
+
+          {!loadingRequests && filteredTeamRequests.length > 0 && (
+            <div className="space-y-3.5">
+              {filteredTeamRequests.map((req) => {
+                const appliedDate = new Date(req.created_at).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                });
+                const isDeciding = decidingId === req.id;
+                const isPendingReq = req.status === "pending";
+
+                return (
+                  <div
+                    key={req.id}
+                    className="glass p-5 rounded-2xl border border-white/10 space-y-4 hover:border-white/20 transition"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      {/* Applicant Profile */}
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-400 flex items-center justify-center font-bold text-white text-sm shrink-0">
+                          {req.applicant_name?.[0]?.toUpperCase() || "A"}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white">
+                              {req.applicant_name || "Applicant"}
+                            </h4>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/60 capitalize font-medium">
+                              {req.applicant_role || "Student"}
+                            </span>
+                          </div>
+                          {req.applicant_email && (
+                            <p className="text-xs text-white/45">{req.applicant_email}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Status / Actions */}
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <span className="text-[11px] text-white/40 mr-1 flex items-center gap-1">
+                          <Calendar size={11} /> {appliedDate}
+                        </span>
+
+                        {isPendingReq ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={isDeciding || isFull}
+                              onClick={() => handleLeaderDecision(req.id, "accepted")}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold transition flex items-center gap-1 disabled:opacity-50"
+                              title={isFull ? "Team capacity reached" : "Accept applicant"}
+                            >
+                              {isDeciding ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Check size={13} />
+                              )}
+                              <span>{isFull ? "Team Full" : "Accept"}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isDeciding}
+                              onClick={() => handleLeaderDecision(req.id, "rejected")}
+                              className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-semibold transition flex items-center gap-1 disabled:opacity-50"
+                            >
+                              <X size={13} />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span
+                            className={`badge text-xs capitalize font-semibold border ${
+                              req.status === "accepted"
+                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                                : req.status === "rejected"
+                                ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                                : "bg-white/10 text-white/60 border-white/15"
+                            }`}
+                          >
+                            {req.status}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Applicant Skills */}
+                    {req.applicant_skills && req.applicant_skills.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <span className="text-[11px] text-white/40 mr-1">Skills:</span>
+                        {req.applicant_skills.map((skill, idx) => (
+                          <span
+                            key={idx}
+                            className="text-[10px] px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-accent-300 font-medium"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Note / Message */}
+                    {req.message && (
+                      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-white/70 italic leading-relaxed">
+                        &ldquo;{req.message}&rdquo;
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── TAB 3: DISCUSSIONS (PLACEHOLDER FOR PHASE 4) ─────────────── */}
       {activeTab === "discussions" && (
-        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15">
+        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15 rounded-2xl">
           <MessageSquare size={32} className="mx-auto text-primary-400" />
           <h3 className="text-base font-bold text-white">Real-Time Team Discussions</h3>
           <p className="text-xs text-white/50 max-w-md mx-auto">
@@ -422,7 +749,7 @@ export default function TeamDetails() {
 
       {/* ── TAB 4: TASKS (PLACEHOLDER FOR PHASE 5) ──────────────────── */}
       {activeTab === "tasks" && (
-        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15">
+        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15 rounded-2xl">
           <CheckCircle2 size={32} className="mx-auto text-accent-400" />
           <h3 className="text-base font-bold text-white">Collaborative Task Tracking</h3>
           <p className="text-xs text-white/50 max-w-md mx-auto">
@@ -433,13 +760,25 @@ export default function TeamDetails() {
 
       {/* ── TAB 5: MEETINGS (PLACEHOLDER FOR PHASE 6) ────────────────── */}
       {activeTab === "meetings" && (
-        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15">
+        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15 rounded-2xl">
           <Calendar size={32} className="mx-auto text-amber-400" />
           <h3 className="text-base font-bold text-white">Team Meetings & Milestones</h3>
           <p className="text-xs text-white/50 max-w-md mx-auto">
             Meeting scheduling, agendas, and SIH milestone sign-offs will be implemented in Phase 6.
           </p>
         </div>
+      )}
+
+      {/* ── Request to Join Modal ────────────────────────────────────── */}
+      {isJoinModalOpen && team && (
+        <RequestToJoinModal
+          isOpen={isJoinModalOpen}
+          team={team}
+          onClose={() => setIsJoinModalOpen(false)}
+          onSuccess={() => {
+            void fetchTeam();
+          }}
+        />
       )}
 
       {/* ── Edit Team Modal ─────────────────────────────────────────── */}
@@ -459,7 +798,7 @@ export default function TeamDetails() {
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
         >
-          <div className="glass max-w-md w-full p-6 sm:p-8 bg-dark-800/95 border-red-500/30 shadow-2xl relative animate-slide-up space-y-4">
+          <div className="glass max-w-md w-full p-6 sm:p-8 bg-dark-800/95 border-red-500/30 shadow-2xl relative animate-slide-up space-y-4 rounded-2xl">
             <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 mx-auto">
               <AlertTriangle size={24} />
             </div>

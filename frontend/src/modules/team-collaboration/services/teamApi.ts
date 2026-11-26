@@ -2,8 +2,12 @@ import axios from "axios";
 import api, { API_BASE_URL, BACKEND_ORIGIN } from "../../../services/api";
 import type {
   ChallengeOption,
+  CreateJoinRequestPayload,
   CreateTeamPayload,
   HealthResponse,
+  JoinRequest,
+  JoinRequestDecisionPayload,
+  JoinRequestListResponse,
   ModuleStatusResponse,
   Team,
   TeamListResponse,
@@ -142,6 +146,64 @@ export const teamApi = {
     const response = await api.delete<{ message: string; team_id: string }>(
       `${teamApiConfig.modulePrefix}/${teamId}`
     );
+    return response.data;
+  },
+
+  /**
+   * Submit a request to join a team.
+   * POST /api/join-requests
+   */
+  async submitJoinRequest(payload: CreateJoinRequestPayload): Promise<JoinRequest> {
+    const response = await api.post<JoinRequest>("/join-requests", payload);
+    return response.data;
+  },
+
+  /**
+   * Get all join requests submitted by the authenticated user.
+   * GET /api/join-requests/my
+   */
+  async getMyJoinRequests(status?: string): Promise<JoinRequestListResponse> {
+    const response = await api.get<JoinRequestListResponse>("/join-requests/my", {
+      params: status && status !== "all" ? { status } : undefined,
+    });
+    return response.data;
+  },
+
+  /**
+   * Get all join requests for a specific team (Leader only).
+   * GET /api/teams/{team_id}/join-requests
+   */
+  async getTeamJoinRequests(teamId: string, status?: string): Promise<JoinRequestListResponse> {
+    const response = await api.get<JoinRequestListResponse>(
+      `${teamApiConfig.modulePrefix}/${teamId}/join-requests`,
+      {
+        params: status && status !== "all" ? { status } : undefined,
+      }
+    );
+    return response.data;
+  },
+
+  /**
+   * Leader approves or rejects a student's join request.
+   * PUT /api/join-requests/{request_id}/decision
+   */
+  async decideJoinRequest(
+    requestId: string,
+    decision: "accepted" | "rejected"
+  ): Promise<JoinRequest> {
+    const response = await api.put<JoinRequest>(
+      `/join-requests/${requestId}/decision`,
+      { decision }
+    );
+    return response.data;
+  },
+
+  /**
+   * Requester cancels their pending join request.
+   * PUT /api/join-requests/{request_id}/cancel
+   */
+  async cancelJoinRequest(requestId: string): Promise<JoinRequest> {
+    const response = await api.put<JoinRequest>(`/join-requests/${requestId}/cancel`);
     return response.data;
   },
 };

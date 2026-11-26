@@ -48,6 +48,7 @@ import MyTeams                 from "./modules/team-collaboration/pages/MyTeams"
 import CreateTeam              from "./modules/team-collaboration/pages/CreateTeam";
 import TeamDetails             from "./modules/team-collaboration/pages/TeamDetails";
 import ExploreTeams            from "./modules/team-collaboration/pages/ExploreTeams";
+import MyJoinRequests          from "./modules/team-collaboration/pages/MyJoinRequests";
 import TeamInvitations         from "./modules/team-collaboration/pages/TeamInvitations";
 import TeamDiscussion          from "./modules/team-collaboration/pages/TeamDiscussion";
 import TeamTasks               from "./modules/team-collaboration/pages/TeamTasks";
@@ -151,6 +152,7 @@ export default function App() {
             <Route path="my-teams"    element={<MyTeams />} />
             <Route path="create"      element={<CreateTeam />} />
             <Route path="explore"     element={<ExploreTeams />} />
+            <Route path="requests"    element={<MyJoinRequests />} />
             <Route path="invitations" element={<TeamInvitations />} />
             <Route path="discussions" element={<TeamDiscussion />} />
             <Route path="tasks"       element={<TeamTasks />} />

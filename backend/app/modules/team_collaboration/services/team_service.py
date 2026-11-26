@@ -170,6 +170,20 @@ async def _enrich_team_doc(db: Any, team_doc: Dict[str, Any], current_user_id: O
     if status_str == TeamStatus.RECRUITING.value and member_count >= max_members:
         status_str = TeamStatus.FULL.value
 
+    # Look up current user's join request status if logged in
+    user_request_status = None
+    user_request_id = None
+    team_oid = team_doc.get("_id")
+    join_requests_col = getattr(db, "join_requests", None)
+    if join_requests_col is not None and current_user_id and ObjectId.is_valid(current_user_id) and team_oid:
+        latest_req = await join_requests_col.find_one(
+            {"team_id": team_oid, "user_id": ObjectId(current_user_id)},
+            sort=[("created_at", -1)],
+        )
+        if latest_req:
+            user_request_status = latest_req.get("status")
+            user_request_id = str(latest_req["_id"])
+
     return TeamResponse(
         id=team_id_str,
         name=team_doc.get("name", "Untitled Team"),
@@ -185,6 +199,8 @@ async def _enrich_team_doc(db: Any, team_doc: Dict[str, Any], current_user_id: O
         status=status_str,
         is_leader=is_current_leader,
         is_member=is_current_member or is_current_leader,
+        user_request_status=user_request_status,
+        user_request_id=user_request_id,
         created_at=team_doc.get("created_at", datetime.now(timezone.utc)),
         updated_at=team_doc.get("updated_at", datetime.now(timezone.utc)),
     )
