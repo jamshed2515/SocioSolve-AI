@@ -64,6 +64,9 @@ export default function UniversityDashboard() {
             <p className="text-white/50 text-sm">Manage institutional projects, students & research.</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <Link to="/challenges" className="btn-ghost text-sm">
+              Explore Challenges
+            </Link>
             <Link to="/proposals" className="btn-ghost text-sm">
               Proposals Hub
             </Link>

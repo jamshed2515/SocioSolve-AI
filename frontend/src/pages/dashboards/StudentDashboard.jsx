@@ -31,8 +31,8 @@ export default function StudentDashboard() {
             <p className="text-white/50 text-sm">Join challenges, build teams, submit solutions.</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <Link to="/proposals" className="btn-ghost text-sm">
-              Proposals Hub
+            <Link to="/challenges" className="btn-ghost text-sm">
+              Explore Challenges
             </Link>
             <Link to="/proposals/new" id="student-browse-btn" className="btn-primary text-sm">
               Submit Proposal <ArrowRight size={16} />
@@ -44,7 +44,11 @@ export default function StudentDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} onClick={() => navigate("/proposals")} className="stat-card cursor-pointer">
+          <div
+            key={label}
+            onClick={() => (label === "Active Challenges" ? navigate("/challenges") : navigate("/proposals"))}
+            className="stat-card cursor-pointer"
+          >
             <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center`}>
               <Icon className={color} size={20} />
             </div>
@@ -58,15 +62,15 @@ export default function StudentDashboard() {
       <div className="glass p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-white">Active Challenges</h3>
-          <Link to="/proposals/new" className="text-xs text-primary-400 hover:text-primary-300 font-medium">
-            Browse All & Propose Solution →
+          <Link to="/challenges" className="text-xs text-primary-400 hover:text-primary-300 font-medium">
+            Browse All Challenges →
           </Link>
         </div>
         <div className="space-y-3">
           {challenges.map((c, i) => (
             <div
               key={i}
-              onClick={() => navigate("/proposals/new")}
+              onClick={() => navigate("/challenges")}
               className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/8 transition cursor-pointer group"
             >
               <div>

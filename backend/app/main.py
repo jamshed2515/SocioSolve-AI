@@ -14,6 +14,7 @@ from app.config.database import connect_to_mongo, close_mongo_connection
 from app.config.firebase import init_firebase
 from app.routes.auth_routes import router as auth_router
 from app.routes.user_routes import router as user_router
+from app.routes.challenge_routes import router as challenge_router
 from app.routes.proposal_routes import router as proposal_router
 from app.modules.team_collaboration.router import router as team_collaboration_router
 from app.modules.team_collaboration.routers.join_request_router import router as join_request_router
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
     # Ensure upload directories exist
     os.makedirs("uploads/avatars", exist_ok=True)
     os.makedirs("uploads/proposals", exist_ok=True)
+    os.makedirs("uploads/challenges", exist_ok=True)
 
     yield
     await close_mongo_connection()
@@ -62,10 +64,16 @@ app.add_middleware(
 # ── Static files (uploaded avatars & proposal documents) ───────────────────
 os.makedirs("uploads/avatars", exist_ok=True)
 os.makedirs("uploads/proposals", exist_ok=True)
+os.makedirs("uploads/challenges", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/api/users", tags=["Users"])
+app.include_router(
+    challenge_router,
+    prefix="/api/challenges",
+    tags=["Module 2 – Societal Challenges"],
+)
 app.include_router(
     team_collaboration_router,
     prefix="/api/teams",

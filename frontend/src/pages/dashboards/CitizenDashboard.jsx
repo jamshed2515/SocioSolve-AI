@@ -1,3 +1,4 @@
+import { Link, useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { MapPin, AlertCircle, Clock, CheckCircle2, Plus, TrendingUp } from "lucide-react";
 
@@ -15,6 +16,8 @@ const recent = [
 ];
 
 export default function CitizenDashboard() {
+  const navigate = useNavigate();
+
   return (
     <DashboardLayout title="Citizen Dashboard">
       {/* Welcome banner */}
@@ -27,16 +30,28 @@ export default function CitizenDashboard() {
             <h2 className="text-lg font-semibold text-white">Welcome, Citizen! 🏘️</h2>
             <p className="text-white/50 text-sm">Report community problems and track their resolution.</p>
           </div>
-          <button id="citizen-report-btn" className="ml-auto btn-primary text-sm">
+          <Link
+            to="/challenges/new"
+            id="citizen-report-btn"
+            className="ml-auto btn-primary text-sm inline-flex items-center gap-1.5"
+          >
             <Plus size={16} /> Report Problem
-          </button>
+          </Link>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="stat-card">
+          <div
+            key={label}
+            onClick={() => {
+              if (label === "Problems Reported" || label === "Under Review" || label === "Resolved") {
+                navigate("/my-challenges");
+              }
+            }}
+            className="stat-card cursor-pointer"
+          >
             <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center`}>
               <Icon className={color} size={20} />
             </div>
@@ -48,10 +63,19 @@ export default function CitizenDashboard() {
 
       {/* Recent reports */}
       <div className="glass p-6">
-        <h3 className="text-base font-semibold text-white mb-4">Recent Reports</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-white">Recent Reports</h3>
+          <Link to="/my-challenges" className="text-xs text-primary-400 hover:text-primary-300 font-medium">
+            View All Reports →
+          </Link>
+        </div>
         <div className="space-y-3">
           {recent.map((r, i) => (
-            <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/8 transition">
+            <div
+              key={i}
+              onClick={() => navigate("/my-challenges")}
+              className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/8 transition cursor-pointer"
+            >
               <div>
                 <p className="text-sm font-medium text-white">{r.title}</p>
                 <p className="text-xs text-white/40 mt-0.5">{r.date}</p>
