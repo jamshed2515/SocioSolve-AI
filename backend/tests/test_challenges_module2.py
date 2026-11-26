@@ -667,16 +667,14 @@ def test_challenge_services_workflow():
         )
         assert withdrawn.status == "draft"
 
-        # Author cannot publish directly without admin
-        try:
-            await challenge_service.update_challenge_status(
-                sub_res.id,
-                ChallengeStatusUpdateRequest(status=ChallengeStatus.PUBLISHED),
-                citizen_user,
-            )
-            assert False, "Author cannot unilaterally publish"
-        except HTTPException as exc:
-            assert exc.status_code == 403
+        # Author can publish directly
+        author_pub = await challenge_service.update_challenge_status(
+            sub_res.id,
+            ChallengeStatusUpdateRequest(status=ChallengeStatus.PUBLISHED),
+            citizen_user,
+        )
+        assert author_pub.status == "published"
+        assert author_pub.isPublished is True
 
         # Admin can publish
         admin_pub = await challenge_service.update_challenge_status(

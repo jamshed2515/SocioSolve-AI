@@ -108,17 +108,17 @@ export default function MyChallengesPage() {
     }
   };
 
-  const handleQuickSubmitDraft = async (challenge) => {
+  const handleQuickPublishDraft = async (challenge) => {
     try {
       setActionInProgress(challenge.id);
       await challengeService.updateChallengeStatus(challenge.id, {
-        status: "submitted",
-        reason: "Author submitted draft for review",
+        status: "published",
+        reason: "Author published challenge",
       });
-      toast.success("Draft submitted for review!");
+      toast.success("Challenge published! It is now live for all roles.");
       fetchMyChallenges();
     } catch (err) {
-      const msg = err.response?.data?.detail || "Failed to submit draft";
+      const msg = err.response?.data?.detail || "Failed to publish challenge";
       toast.error(msg);
     } finally {
       setActionInProgress(null);
@@ -289,13 +289,13 @@ export default function MyChallengesPage() {
                   <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
                     {c.status === "draft" && (
                       <button
-                        onClick={() => handleQuickSubmitDraft(c)}
+                        onClick={() => handleQuickPublishDraft(c)}
                         disabled={actionInProgress === c.id}
                         className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-                        title="Submit draft for review"
+                        title="Publish challenge"
                       >
                         <Send size={13} />
-                        <span>Submit</span>
+                        <span>Publish</span>
                       </button>
                     )}
 

@@ -82,7 +82,13 @@ def is_published_status(status: ChallengeStatus | str) -> bool:
     student discovery, team formation, and solution proposals.
     """
     s = status.value if isinstance(status, ChallengeStatus) else str(status).lower()
-    return s in {ChallengeStatus.PUBLISHED.value, ChallengeStatus.IN_PROGRESS.value}
+    return s in {
+        ChallengeStatus.PUBLISHED.value,
+        ChallengeStatus.IN_PROGRESS.value,
+        ChallengeStatus.RESOLVED.value,
+        "open",
+        "active",
+    }
 
 
 def generate_challenge_code() -> str:

@@ -201,12 +201,12 @@ export default function ChallengeFormPage() {
         toast.success("Challenge successfully updated!");
         navigate(`/challenges/${id}`);
       } else {
-        payload.status = targetStatus; // "draft" or "submitted"
+        payload.status = targetStatus === "draft" ? "draft" : "published";
         const created = await challengeService.createChallenge(payload);
         toast.success(
           targetStatus === "draft"
             ? "Challenge saved as draft!"
-            : "Challenge submitted successfully for review!"
+            : "Challenge published! It is now live and visible to all roles."
         );
         navigate(`/challenges/${created.id}`);
       }
@@ -517,7 +517,7 @@ export default function ChallengeFormPage() {
 
                 <button
                   type="button"
-                  onClick={() => handleSubmit(isEditMode ? undefined : "submitted")}
+                  onClick={() => handleSubmit(isEditMode ? undefined : "published")}
                   disabled={submitting}
                   className="btn-primary w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold shadow-lg shadow-primary-500/25 hover:shadow-primary-500/35 disabled:opacity-50"
                 >
@@ -526,10 +526,10 @@ export default function ChallengeFormPage() {
                     {submitting && submissionTarget !== "draft"
                       ? isEditMode
                         ? "Saving Changes..."
-                        : "Submitting Challenge..."
+                        : "Publishing Challenge..."
                       : isEditMode
                       ? "Save Changes"
-                      : "Submit for Review"}
+                      : "Publish Challenge"}
                   </span>
                 </button>
               </div>

@@ -54,7 +54,7 @@ class ChallengeCreateRequest(BaseModel):
     category: ChallengeCategory = Field(..., description="Societal domain category")
     location: str = Field(..., min_length=2, max_length=200, description="Target geographical area, city, or district")
     difficulty: ChallengeDifficulty = Field(default=ChallengeDifficulty.MEDIUM, description="Estimated difficulty level")
-    status: Optional[ChallengeStatus] = Field(default=ChallengeStatus.SUBMITTED, description="Initial submission status: draft or submitted")
+    status: Optional[ChallengeStatus] = Field(default=ChallengeStatus.PUBLISHED, description="Initial submission status: draft, submitted, or published")
     expectedImpact: Optional[str] = Field(default=None, max_length=2000, description="Expected outcome and community impact")
     deadline: Optional[str] = Field(default=None, max_length=50, description="Target resolution deadline (ISO format or date)")
     tags: List[str] = Field(default_factory=list, description="Keywords and tags")

@@ -37,7 +37,7 @@ export default function ChallengeExplorePage() {
     location: searchParams.get("location") || "",
     difficulty: searchParams.get("difficulty") || "",
     sortBy: searchParams.get("sortBy") || "newest",
-    status: searchParams.get("status") || "published",
+    status: searchParams.get("status") || "all",
   });
 
   const limit = 9;
@@ -112,7 +112,7 @@ export default function ChallengeExplorePage() {
       location: "",
       difficulty: "",
       sortBy: "newest",
-      status: "published",
+      status: "all",
     });
     setPage(1);
   };

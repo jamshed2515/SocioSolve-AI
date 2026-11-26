@@ -451,6 +451,8 @@ async def update_challenge_status(
     if not is_admin:
         allowed_author_transitions = [
             (ChallengeStatus.DRAFT, ChallengeStatus.SUBMITTED),
+            (ChallengeStatus.DRAFT, ChallengeStatus.PUBLISHED),
+            (ChallengeStatus.SUBMITTED, ChallengeStatus.PUBLISHED),
             (ChallengeStatus.SUBMITTED, ChallengeStatus.DRAFT),  # Withdraw
             (ChallengeStatus.PUBLISHED, ChallengeStatus.CLOSED),  # Close own
         ]

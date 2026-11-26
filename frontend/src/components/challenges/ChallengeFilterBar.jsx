@@ -35,6 +35,15 @@ export const SORT_OPTIONS = [
   { value: "deadline", label: "Closest Deadline" },
 ];
 
+export const STATUS_OPTIONS = [
+  { value: "all", label: "All Statuses" },
+  { value: "published", label: "Published" },
+  { value: "submitted", label: "Submitted (Review)" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
+];
+
 export default function ChallengeFilterBar({
   filters = {},
   onFilterChange,
@@ -122,7 +131,7 @@ export default function ChallengeFilterBar({
 
       {/* Filter controls row (always visible on desktop, toggleable on mobile) */}
       <div className={`${mobileExpanded ? "block" : "hidden"} sm:block pt-3 border-t border-white/10`}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Location filter */}
           <div className="relative">
             <MapPin
@@ -148,6 +157,22 @@ export default function ChallengeFilterBar({
               aria-label="Filter by difficulty"
             >
               {DIFFICULTY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-dark-800 text-white">
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status filter */}
+          <div>
+            <select
+              value={status || "all"}
+              onChange={(e) => handleTextChange("status", e.target.value)}
+              className="input py-2 text-xs cursor-pointer"
+              aria-label="Filter by status"
+            >
+              {STATUS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value} className="bg-dark-800 text-white">
                   {opt.label}
                 </option>
