@@ -56,6 +56,13 @@ async def create_indexes():
     await db.proposal_reviews.create_index([("proposalId", 1), ("reviewerId", 1)], unique=True)
     await db.proposal_status_history.create_index([("proposalId", 1), ("timestamp", 1)])
     await db.notifications.create_index([("userId", 1), ("createdAt", -1)])
+
+    # Module 2 – Societal Challenges indexes
+    await db.challenges.create_index([("title", "text"), ("description", "text")])
+    await db.challenges.create_index("category")
+    await db.challenges.create_index("status")
+    await db.challenges.create_index("authorId")
+    await db.challenges.create_index([("status", 1), ("createdAt", -1)])
     logger.info("✅ Database indexes created.")
 
 
