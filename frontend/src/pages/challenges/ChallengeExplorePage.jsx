@@ -173,7 +173,7 @@ export default function ChallengeExplorePage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <Link
-                to="/challenges/my"
+                to="/my-challenges"
                 className="btn-ghost inline-flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 transition-all text-slate-200"
               >
                 <Layers size={16} className="text-slate-400" />

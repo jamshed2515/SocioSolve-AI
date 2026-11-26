@@ -372,12 +372,16 @@ def test_module4_seed_challenge_compatibility():
 
 
 # ── Phase 2: Service & API Integration Tests ─────────────────────────────────
-
+import asyncio
 from io import BytesIO
 from bson import ObjectId
-from fastapi import UploadFile
-from app.services import challenge_service
-from app.services import proposal_service
+from fastapi import UploadFile, HTTPException
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.config import database as db_config
+from app.middleware.auth_middleware import get_current_user, require_active_user
+from app.services import challenge_service, proposal_service
 
 
 class InMemoryCursor:
@@ -452,7 +456,6 @@ class InMemoryCollection:
                     if "$regex" in v:
                         import re
                         flags = re.IGNORECASE if "i" in v.get("$options", "") else 0
-                        # support regex matching over string or list of strings (tags)
                         if isinstance(val, list):
                             if not any(re.search(v["$regex"], str(item or ""), flags) for item in val):
                                 return False
@@ -488,6 +491,10 @@ class InMemoryCollection:
 
         return Result()
 
+    async def insert_many(self, docs):
+        for d in docs:
+            await self.insert_one(d)
+
     async def update_one(self, query, update):
         for d in self.docs:
             if self._matches(d, query):
@@ -505,7 +512,6 @@ class InMemoryCollection:
                 return
 
     def aggregate(self, pipeline):
-        # basic group by for categories
         counts = {}
         match_stage = None
         for stage in pipeline:
@@ -529,17 +535,189 @@ class InMemoryDB:
         self.teams = InMemoryCollection()
 
 
-@pytest.fixture
-def mock_db(monkeypatch):
+def test_challenge_services_workflow():
+    """Verify all Module 2 service operations in an end-to-end workflow."""
+    async def _run():
+        db = InMemoryDB()
+        challenge_service.get_database = lambda: db
+        db_config.get_database = lambda: db
+        proposal_service.get_database = lambda: db
+
+        citizen_user = {
+            "_id": ObjectId("6745f1a2b3c4d5e6f7a8b901"),
+            "name": "Citizen User",
+            "email": "citizen@example.com",
+            "role": "citizen",
+            "is_active": True,
+        }
+        student_user = {
+            "_id": ObjectId("6745f1a2b3c4d5e6f7a8b902"),
+            "name": "Student User",
+            "email": "student@example.com",
+            "role": "student",
+            "is_active": True,
+        }
+        admin_user = {
+            "_id": ObjectId("6745f1a2b3c4d5e6f7a8b999"),
+            "name": "Admin User",
+            "email": "admin@example.com",
+            "role": "admin",
+            "is_active": True,
+        }
+
+        # 1. Create submitted challenge
+        req_sub = ChallengeCreateRequest(
+            title="Urban Flood Drainage Warning System",
+            description="Low-lying areas face severe waterlogging during monsoons. Need sensors and alert system.",
+            category=ChallengeCategory.ENVIRONMENT_WATER,
+            location="Surat, Gujarat",
+            difficulty=ChallengeDifficulty.MEDIUM,
+            status=ChallengeStatus.SUBMITTED,
+            expectedImpact="Reduce flood damage for 25,000 residents.",
+            tags=["flood", "iot", "drainage"],
+        )
+        sub_res = await challenge_service.create_challenge(req_sub, citizen_user)
+        assert sub_res.title == req_sub.title
+        assert sub_res.authorId == str(citizen_user["_id"])
+        assert sub_res.status == "submitted"
+        assert sub_res.isPublished is False
+
+        # 2. Create draft challenge
+        req_draft = ChallengeCreateRequest(
+            title="Draft Smart Waste Sorter Proposal",
+            description="Preliminary notes on automated domestic waste sorting and recycling incentives.",
+            category=ChallengeCategory.WASTE_MANAGEMENT,
+            location="Indore, Madhya Pradesh",
+            status=ChallengeStatus.DRAFT,
+        )
+        draft_res = await challenge_service.create_challenge(req_draft, citizen_user)
+        assert draft_res.status == "draft"
+        assert draft_res.isPublished is False
+
+        # 3. Create published challenge
+        req_pub = ChallengeCreateRequest(
+            title="Primary Healthcare Tele-triage Station",
+            description="Remotely connect rural health sub-centers to district hospital specialists.",
+            category=ChallengeCategory.HEALTHCARE,
+            location="Ranchi, Jharkhand",
+            status=ChallengeStatus.PUBLISHED,
+        )
+        pub_res = await challenge_service.create_challenge(req_pub, citizen_user)
+        assert pub_res.status == "published"
+        assert pub_res.isPublished is True
+
+        # 4. Public discovery excludes drafts
+        public_list = await challenge_service.get_challenges(current_user=None)
+        assert not any(c.status == "draft" for c in public_list.challenges)
+
+        # 5. My challenges shows author drafts
+        my_list = await challenge_service.get_my_challenges(citizen_user)
+        assert any(c.status == "draft" for c in my_list.challenges)
+
+        # 6. View details & view count increment
+        view1 = await challenge_service.get_challenge_by_id(pub_res.id, student_user)
+        assert view1.viewsCount == 1
+        view2 = await challenge_service.get_challenge_by_id(pub_res.id, student_user)
+        assert view2.viewsCount == 2
+
+        # 7. Draft hidden from non-author
+        try:
+            await challenge_service.get_challenge_by_id(draft_res.id, student_user)
+            assert False, "Should have raised 404 for stranger viewing draft"
+        except HTTPException as exc:
+            assert exc.status_code == 404
+
+        # 8. Search and filter
+        search_res = await challenge_service.get_challenges(search="Tele-triage")
+        assert search_res.total == 1
+        assert "Healthcare" in search_res.challenges[0].category
+
+        cat_res = await challenge_service.get_challenges(category="Healthcare")
+        assert cat_res.total == 1
+
+        loc_res = await challenge_service.get_challenges(location="Ranchi")
+        assert loc_res.total == 1
+
+        # 9. Update permissions
+        # Stranger updating fails (403)
+        try:
+            await challenge_service.update_challenge(
+                pub_res.id,
+                ChallengeUpdateRequest(title="Hacked Title By Stranger"),
+                student_user,
+            )
+            assert False, "Stranger should not be allowed to update"
+        except HTTPException as exc:
+            assert exc.status_code == 403
+
+        # Author update succeeds
+        upd_res = await challenge_service.update_challenge(
+            pub_res.id,
+            ChallengeUpdateRequest(title="Primary Healthcare Tele-triage Station (Updated)"),
+            citizen_user,
+        )
+        assert "Updated" in upd_res.title
+
+        # 10. Status lifecycle transitions
+        # Author withdraws submitted -> draft
+        withdrawn = await challenge_service.update_challenge_status(
+            sub_res.id,
+            ChallengeStatusUpdateRequest(status=ChallengeStatus.DRAFT, reason="Need more data"),
+            citizen_user,
+        )
+        assert withdrawn.status == "draft"
+
+        # Author cannot publish directly without admin
+        try:
+            await challenge_service.update_challenge_status(
+                sub_res.id,
+                ChallengeStatusUpdateRequest(status=ChallengeStatus.PUBLISHED),
+                citizen_user,
+            )
+            assert False, "Author cannot unilaterally publish"
+        except HTTPException as exc:
+            assert exc.status_code == 403
+
+        # Admin can publish
+        admin_pub = await challenge_service.update_challenge_status(
+            sub_res.id,
+            ChallengeStatusUpdateRequest(status=ChallengeStatus.PUBLISHED),
+            admin_user,
+        )
+        assert admin_pub.status == "published"
+        assert admin_pub.isPublished is True
+
+        # 11. Delete dependency protection
+        # Link proposal
+        await db.proposals.insert_one({"challengeId": pub_res.id, "title": "Test Proposal"})
+        try:
+            await challenge_service.delete_challenge(pub_res.id, citizen_user)
+            assert False, "Should have blocked deletion with proposal attached"
+        except HTTPException as exc:
+            assert exc.status_code == 400
+            assert "proposal" in exc.detail.lower()
+
+        # Clear proposal and delete succeeds
+        await db.proposals.delete_one({"challengeId": pub_res.id})
+        del_res = await challenge_service.delete_challenge(pub_res.id, citizen_user)
+        assert del_res["message"] == "Challenge deleted successfully."
+
+        # 12. Module 4 integration test
+        val = await proposal_service.get_published_challenge_or_400(db, sub_res.id)
+        assert val["id"] == sub_res.id
+        assert val["isPublished"] is True
+
+    asyncio.run(_run())
+
+
+def test_challenge_fastapi_client_endpoints(monkeypatch):
+    """Test all /api/challenges endpoints via FastAPI TestClient."""
     db = InMemoryDB()
-    monkeypatch.setattr(challenge_service, "get_database", lambda: db)
-    monkeypatch.setattr(proposal_service, "get_database", lambda: db)
-    return db
+    challenge_service.get_database = lambda: db
+    db_config.get_database = lambda: db
+    monkeypatch.setattr("app.utils.cloudinary_storage.is_cloudinary_configured", lambda: False)
 
-
-@pytest.fixture
-def citizen_user():
-    return {
+    citizen_user = {
         "_id": ObjectId("6745f1a2b3c4d5e6f7a8b901"),
         "name": "Citizen User",
         "email": "citizen@example.com",
@@ -547,451 +725,65 @@ def citizen_user():
         "is_active": True,
     }
 
+    app.dependency_overrides[require_active_user] = lambda: citizen_user
+    app.dependency_overrides[get_current_user] = lambda: citizen_user
 
-@pytest.fixture
-def student_user():
-    return {
-        "_id": ObjectId("6745f1a2b3c4d5e6f7a8b902"),
-        "name": "Student User",
-        "email": "student@example.com",
-        "role": "student",
-        "is_active": True,
-    }
+    client = TestClient(app)
 
-
-@pytest.fixture
-def admin_user():
-    return {
-        "_id": ObjectId("6745f1a2b3c4d5e6f7a8b999"),
-        "name": "Admin User",
-        "email": "admin@example.com",
-        "role": "admin",
-        "is_active": True,
-    }
-
-
-@pytest.mark.anyio
-async def test_service_create_challenge_submitted(mock_db, citizen_user):
-    """Test creating a submitted challenge via service."""
-    req = ChallengeCreateRequest(
-        title="Urban Flood Drainage Warning System",
-        description="Low-lying areas face severe waterlogging during monsoons. Need sensors and alert system.",
-        category=ChallengeCategory.ENVIRONMENT_WATER,
-        location="Surat, Gujarat",
-        difficulty=ChallengeDifficulty.MEDIUM,
-        status=ChallengeStatus.SUBMITTED,
-        expectedImpact="Reduce flood damage for 25,000 residents.",
-        tags=["flood", "iot", "drainage"],
+    # 1. POST /api/challenges (Create)
+    res_create = client.post(
+        "/api/challenges",
+        json={
+            "title": "Clean Water IoT Sorter",
+            "description": "Sensors and analytics for village water filtration units across the district.",
+            "category": "Environment & Water",
+            "location": "Ahmedabad, Gujarat",
+            "difficulty": "Medium",
+            "status": "published",
+        },
     )
+    assert res_create.status_code == 201, res_create.text
+    ch_data = res_create.json()
+    assert ch_data["title"] == "Clean Water IoT Sorter"
+    ch_id = ch_data["id"]
 
-    res = await challenge_service.create_challenge(req, citizen_user)
-    assert res.id is not None
-    assert res.title == req.title
-    assert res.authorId == str(citizen_user["_id"])
-    assert res.authorName == citizen_user["name"]
-    assert res.authorEmail == citizen_user["email"]
-    assert res.status == "submitted"
-    assert res.isPublished is False
+    # 2. GET /api/challenges (Discovery)
+    res_list = client.get("/api/challenges?page=1&limit=10")
+    assert res_list.status_code == 200
+    assert res_list.json()["total"] >= 1
 
-    # Check stored document
-    stored = await mock_db.challenges.find_one({"_id": ObjectId(res.id)})
-    assert stored is not None
-    assert stored["authorId"] == str(citizen_user["_id"])
+    # 3. GET /api/challenges/my
+    res_my = client.get("/api/challenges/my?page=1&limit=10")
+    assert res_my.status_code == 200
+    assert res_my.json()["total"] >= 1
 
+    # 4. GET /api/challenges/categories
+    res_cats = client.get("/api/challenges/categories")
+    assert res_cats.status_code == 200
+    assert res_cats.json()["totalCategories"] >= 1
 
-@pytest.mark.anyio
-async def test_service_create_challenge_draft(mock_db, citizen_user):
-    """Test saving a challenge as a draft."""
-    req = ChallengeCreateRequest(
-        title="Draft Smart Waste Sorter Proposal",
-        description="Preliminary notes on automated domestic waste sorting and recycling incentives.",
-        category=ChallengeCategory.WASTE_MANAGEMENT,
-        location="Indore, Madhya Pradesh",
-        status=ChallengeStatus.DRAFT,
+    # 5. GET /api/challenges/{id}
+    res_details = client.get(f"/api/challenges/{ch_id}")
+    assert res_details.status_code == 200
+    assert res_details.json()["id"] == ch_id
+
+    # 6. PUT /api/challenges/{id}
+    res_upd = client.put(f"/api/challenges/{ch_id}", json={"location": "Surat, Gujarat"})
+    assert res_upd.status_code == 200
+    assert res_upd.json()["location"] == "Surat, Gujarat"
+
+    # 7. POST /api/challenges/upload-attachment
+    file_bytes = b"%PDF-1.4 Mock challenge survey document"
+    res_upload = client.post(
+        "/api/challenges/upload-attachment",
+        files={"file": ("survey.pdf", file_bytes, "application/pdf")},
     )
-    res = await challenge_service.create_challenge(req, citizen_user)
-    assert res.status == "draft"
-    assert res.isPublished is False
+    assert res_upload.status_code == 200
+    assert res_upload.json()["name"] == "survey.pdf"
 
+    # 8. DELETE /api/challenges/{id}
+    res_del = client.delete(f"/api/challenges/{ch_id}")
+    assert res_del.status_code == 200
 
-@pytest.mark.anyio
-async def test_service_create_challenge_published(mock_db, citizen_user):
-    """Test creating a published challenge directly."""
-    req = ChallengeCreateRequest(
-        title="Primary Healthcare Tele-triage Station",
-        description="Remotely connect rural health sub-centers to district hospital specialists.",
-        category=ChallengeCategory.HEALTHCARE,
-        location="Ranchi, Jharkhand",
-        status=ChallengeStatus.PUBLISHED,
-    )
-    res = await challenge_service.create_challenge(req, citizen_user)
-    assert res.status == "published"
-    assert res.isPublished is True
+    app.dependency_overrides.clear()
 
-
-@pytest.mark.anyio
-async def test_service_discovery_hides_drafts_from_public(mock_db, citizen_user, student_user):
-    """Verify that public challenge discovery excludes draft challenges."""
-    # 1. Create a published challenge
-    req1 = ChallengeCreateRequest(
-        title="Clean Energy Microgrid for Remote Hamlets",
-        description="Provide hybrid solar-battery power to tribal villages with zero grid connectivity.",
-        category=ChallengeCategory.RENEWABLE_ENERGY,
-        location="Leh, Ladakh",
-        status=ChallengeStatus.PUBLISHED,
-    )
-    await challenge_service.create_challenge(req1, citizen_user)
-
-    # 2. Create a draft challenge
-    req2 = ChallengeCreateRequest(
-        title="Unpublished Draft Healthcare Study",
-        description="Private draft document that is not ready for student proposals or public view.",
-        category=ChallengeCategory.HEALTHCARE,
-        location="Pune, Maharashtra",
-        status=ChallengeStatus.DRAFT,
-    )
-    await challenge_service.create_challenge(req2, citizen_user)
-
-    # Public visitor (current_user=None)
-    public_list = await challenge_service.get_challenges(current_user=None)
-    assert public_list.total == 1
-    assert public_list.challenges[0].title == req1.title
-
-    # Student user (current_user=student_user)
-    student_list = await challenge_service.get_challenges(current_user=student_user)
-    assert student_list.total == 1
-    assert student_list.challenges[0].title == req1.title
-
-
-@pytest.mark.anyio
-async def test_service_my_challenges_shows_author_drafts(mock_db, citizen_user):
-    """Verify authors can see their own drafts via get_my_challenges."""
-    req_draft = ChallengeCreateRequest(
-        title="Author's Private Draft Challenge",
-        description="Confidential notes on agricultural crop disease detection using phone cameras.",
-        category=ChallengeCategory.AGRICULTURE,
-        location="Nagpur, Maharashtra",
-        status=ChallengeStatus.DRAFT,
-    )
-    await challenge_service.create_challenge(req_draft, citizen_user)
-
-    my_list = await challenge_service.get_my_challenges(citizen_user)
-    assert my_list.total == 1
-    assert my_list.challenges[0].status == "draft"
-
-
-@pytest.mark.anyio
-async def test_service_get_challenge_details_and_view_count(mock_db, citizen_user, student_user):
-    """Verify get_challenge_by_id returns complete details and increments view count."""
-    req = ChallengeCreateRequest(
-        title="Adaptive Traffic Signal Optimization",
-        description="Use edge cameras and AI models to adjust traffic light durations dynamically.",
-        category=ChallengeCategory.SMART_CITIES_MOBILITY,
-        location="Hyderabad, Telangana",
-        status=ChallengeStatus.PUBLISHED,
-    )
-    created = await challenge_service.create_challenge(req, citizen_user)
-
-    # First view
-    details1 = await challenge_service.get_challenge_by_id(created.id, student_user)
-    assert details1.id == created.id
-    assert details1.viewsCount == 1
-
-    # Second view
-    details2 = await challenge_service.get_challenge_by_id(created.id, student_user)
-    assert details2.viewsCount == 2
-
-
-@pytest.mark.anyio
-async def test_service_draft_hidden_from_non_author_details(mock_db, citizen_user, student_user):
-    """Verify attempting to view a draft challenge directly raises 404 for non-author."""
-    req = ChallengeCreateRequest(
-        title="Classified Draft Problem Statement",
-        description="Internal proposal notes for testing privacy boundaries on draft documents.",
-        category=ChallengeCategory.OTHER,
-        location="Delhi, NCR",
-        status=ChallengeStatus.DRAFT,
-    )
-    draft = await challenge_service.create_challenge(req, citizen_user)
-
-    # Stranger (student) gets 404
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
-        await challenge_service.get_challenge_by_id(draft.id, student_user)
-    assert exc.value.status_code == 404
-
-    # Author can view it
-    author_view = await challenge_service.get_challenge_by_id(draft.id, citizen_user)
-    assert author_view.id == draft.id
-
-
-@pytest.mark.anyio
-async def test_service_search_filtering_sorting_pagination(mock_db, citizen_user):
-    """Test search, category, location, difficulty filters, sorting, and pagination."""
-    items = [
-        ("AI Clean Water Filter", "Environment & Water", "Ahmedabad", "Easy", 10),
-        ("Rural School STEM Kit", "Education", "Patna", "Medium", 25),
-        ("Smart Agriculture Sensor", "Agriculture", "Nagpur", "Hard", 50),
-        ("City Solid Waste Tracker", "Waste Management", "Indore", "Medium", 5),
-    ]
-    for title, cat, loc, diff, views in items:
-        doc = new_challenge_document(
-            title=title,
-            description="A detailed description for " + title + " solving real community problems.",
-            category=cat,
-            location=loc,
-            author_id=str(citizen_user["_id"]),
-            author_name=citizen_user["name"],
-            difficulty=diff,
-            status=ChallengeStatus.PUBLISHED,
-        )
-        doc["viewsCount"] = views
-        await mock_db.challenges.insert_one(doc)
-
-    # 1. Search filter
-    res_search = await challenge_service.get_challenges(search="STEM")
-    assert res_search.total == 1
-    assert "STEM" in res_search.challenges[0].title
-
-    # 2. Category filter
-    res_cat = await challenge_service.get_challenges(category="Agriculture")
-    assert res_cat.total == 1
-    assert res_cat.challenges[0].category == "Agriculture"
-
-    # 3. Location filter
-    res_loc = await challenge_service.get_challenges(location="Indore")
-    assert res_loc.total == 1
-    assert "Indore" in res_loc.challenges[0].location
-
-    # 4. Difficulty filter
-    res_diff = await challenge_service.get_challenges(difficulty="Hard")
-    assert res_diff.total == 1
-    assert res_diff.challenges[0].difficulty == "Hard"
-
-    # 5. Sorting by views
-    res_sort = await challenge_service.get_challenges(sort_by="views")
-    assert res_sort.challenges[0].title == "Smart Agriculture Sensor"  # 50 views
-
-    # 6. Pagination
-    res_page = await challenge_service.get_challenges(page=1, limit=2)
-    assert len(res_page.challenges) == 2
-    assert res_page.pages == 2
-    assert res_page.total == 4
-
-
-@pytest.mark.anyio
-async def test_service_update_challenge_permissions(mock_db, citizen_user, student_user, admin_user):
-    """Test challenge updating by author, admin, and rejection for strangers."""
-    req = ChallengeCreateRequest(
-        title="Initial Community Problem Statement",
-        description="Initial description of municipal water leakage across residential wards.",
-        category=ChallengeCategory.ENVIRONMENT_WATER,
-        location="Jaipur, Rajasthan",
-        status=ChallengeStatus.SUBMITTED,
-    )
-    created = await challenge_service.create_challenge(req, citizen_user)
-
-    # Stranger tries to update -> 403
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
-        await challenge_service.update_challenge(
-            created.id,
-            ChallengeUpdateRequest(title="Hacked Title By Stranger"),
-            student_user,
-        )
-    assert exc.value.status_code == 403
-
-    # Author updates successfully
-    upd = await challenge_service.update_challenge(
-        created.id,
-        ChallengeUpdateRequest(title="Updated Community Problem Statement"),
-        citizen_user,
-    )
-    assert upd.title == "Updated Community Problem Statement"
-
-    # Admin updates successfully
-    admin_upd = await challenge_service.update_challenge(
-        created.id,
-        ChallengeUpdateRequest(location="Jaipur & Ajmer, Rajasthan"),
-        admin_user,
-    )
-    assert admin_upd.location == "Jaipur & Ajmer, Rajasthan"
-
-
-@pytest.mark.anyio
-async def test_service_delete_challenge_dependency_block(mock_db, citizen_user, student_user):
-    """Verify challenge cannot be deleted when proposals are linked."""
-    req = ChallengeCreateRequest(
-        title="Challenge With Proposals Attached",
-        description="Societal problem statement that students have already written proposals for.",
-        category=ChallengeCategory.HEALTHCARE,
-        location="Chennai, Tamil Nadu",
-        status=ChallengeStatus.PUBLISHED,
-    )
-    created = await challenge_service.create_challenge(req, citizen_user)
-
-    # Simulate proposal linked to this challenge in db.proposals
-    await mock_db.proposals.insert_one(
-        {
-            "challengeId": created.id,
-            "title": "Proposed Solution for Healthcare Challenge",
-            "authorId": str(student_user["_id"]),
-            "status": "submitted",
-        }
-    )
-
-    # Attempt delete -> 400 Bad Request
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
-        await challenge_service.delete_challenge(created.id, citizen_user)
-    assert exc.value.status_code == 400
-    assert "associated proposal" in exc.value.detail
-
-    # Remove proposal -> now delete succeeds
-    await mock_db.proposals.delete_one({"challengeId": created.id})
-    res_del = await challenge_service.delete_challenge(created.id, citizen_user)
-    assert res_del["message"] == "Challenge deleted successfully."
-
-    # Verify document no longer exists
-    assert await mock_db.challenges.find_one({"_id": ObjectId(created.id)}) is None
-
-
-@pytest.mark.anyio
-async def test_service_status_transition_rules(mock_db, citizen_user, admin_user):
-    """Verify status transition enforcement between author and administrator."""
-    req = ChallengeCreateRequest(
-        title="Status Lifecycle Testing Challenge",
-        description="Validating state machine transition pathways and role permission bounds.",
-        category=ChallengeCategory.EDUCATION,
-        location="Kolkata, West Bengal",
-        status=ChallengeStatus.SUBMITTED,
-    )
-    created = await challenge_service.create_challenge(req, citizen_user)
-
-    # Author withdraws submitted -> draft: Allowed
-    w_res = await challenge_service.update_challenge_status(
-        created.id,
-        ChallengeStatusUpdateRequest(status=ChallengeStatus.DRAFT, reason="Withdrawing for revisions"),
-        citizen_user,
-    )
-    assert w_res.status == "draft"
-    assert w_res.isPublished is False
-
-    # Author cannot publish directly without admin: Forbidden 403
-    from fastapi import HTTPException
-    with pytest.raises(HTTPException) as exc:
-        await challenge_service.update_challenge_status(
-            created.id,
-            ChallengeStatusUpdateRequest(status=ChallengeStatus.PUBLISHED),
-            citizen_user,
-        )
-    assert exc.value.status_code == 403
-
-    # Admin publishes: Allowed
-    pub_res = await challenge_service.update_challenge_status(
-        created.id,
-        ChallengeStatusUpdateRequest(status=ChallengeStatus.PUBLISHED),
-        admin_user,
-    )
-    assert pub_res.status == "published"
-    assert pub_res.isPublished is True
-
-
-@pytest.mark.anyio
-async def test_attachment_upload_service(citizen_user, monkeypatch):
-    """Test attachment upload with allowed and forbidden file extensions."""
-    # Mock cloudinary configuration to False to test local file fallback
-    monkeypatch.setattr("app.utils.cloudinary_storage.is_cloudinary_configured", lambda: False)
-
-    # 1. Valid PDF upload
-    valid_file = UploadFile(
-        filename="field_report.pdf",
-        file=BytesIO(b"%PDF-1.4 test content for challenge attachment"),
-    )
-    res_att = await challenge_service.upload_challenge_attachment(valid_file, citizen_user)
-    assert res_att["name"] == "field_report.pdf"
-    assert res_att["url"].startswith("/uploads/challenges/")
-    assert res_att["fileType"] == "pdf"
-    assert res_att["sizeBytes"] > 0
-
-    # 2. Forbidden extension (e.g. .exe)
-    from fastapi import HTTPException
-    bad_file = UploadFile(
-        filename="malicious_script.exe",
-        file=BytesIO(b"binary content"),
-    )
-    with pytest.raises(HTTPException) as exc:
-        await challenge_service.upload_challenge_attachment(bad_file, citizen_user)
-    assert exc.value.status_code == 400
-    assert "Unsupported file type" in exc.value.detail
-
-
-@pytest.mark.anyio
-async def test_categories_aggregation(mock_db, citizen_user):
-    """Test get_challenge_categories returns distribution counts."""
-    doc1 = new_challenge_document(
-        title="Water Project 1",
-        description="A sufficiently detailed description of the community water challenge.",
-        category=ChallengeCategory.ENVIRONMENT_WATER,
-        location="City A",
-        author_id=str(citizen_user["_id"]),
-        author_name=citizen_user["name"],
-        status=ChallengeStatus.PUBLISHED,
-    )
-    doc2 = new_challenge_document(
-        title="Water Project 2",
-        description="A sufficiently detailed description of another water challenge.",
-        category=ChallengeCategory.ENVIRONMENT_WATER,
-        location="City B",
-        author_id=str(citizen_user["_id"]),
-        author_name=citizen_user["name"],
-        status=ChallengeStatus.PUBLISHED,
-    )
-    doc3 = new_challenge_document(
-        title="Healthcare Clinic Project",
-        description="A sufficiently detailed description of the rural health challenge.",
-        category=ChallengeCategory.HEALTHCARE,
-        location="City C",
-        author_id=str(citizen_user["_id"]),
-        author_name=citizen_user["name"],
-        status=ChallengeStatus.PUBLISHED,
-    )
-    await mock_db.challenges.insert_one(doc1)
-    await mock_db.challenges.insert_one(doc2)
-    await mock_db.challenges.insert_one(doc3)
-
-    cats = await challenge_service.get_challenge_categories()
-    assert cats["totalCategories"] == len(ChallengeCategory)
-    counts = {c["category"]: c["count"] for c in cats["categories"]}
-    assert counts.get("Environment & Water") == 2
-    assert counts.get("Healthcare") == 1
-    assert counts.get("Agriculture") == 0
-
-
-@pytest.mark.anyio
-async def test_module4_proposal_service_consumes_module2_challenge(mock_db, citizen_user):
-    """
-    CRITICAL INTEGRATION TEST:
-    Verify that a challenge created by Module 2 satisfies Module 4's
-    proposal_service.get_published_challenge_or_400() without any errors.
-    """
-    req = ChallengeCreateRequest(
-        title="AI-Powered Agricultural Soil Health Scanner",
-        description="Empower farmers with low-cost spectroscopic analysis of soil nitrogen and phosphorus.",
-        category=ChallengeCategory.AGRICULTURE,
-        location="Nashik, Maharashtra",
-        status=ChallengeStatus.PUBLISHED,
-        expectedImpact="Reduce fertilizer waste by 20% across 500 farms.",
-    )
-    created = await challenge_service.create_challenge(req, citizen_user)
-
-    # Call Module 4's exact validation function
-    validated_for_proposal = await proposal_service.get_published_challenge_or_400(
-        mock_db,
-        created.id,
-    )
-    assert validated_for_proposal is not None
-    assert validated_for_proposal["title"] == req.title
-    assert validated_for_proposal["category"] == "Agriculture"
-    assert validated_for_proposal["status"] == "published"
-    assert validated_for_proposal["isPublished"] is True

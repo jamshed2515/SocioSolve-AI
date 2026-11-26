@@ -14,24 +14,32 @@ import {
   PlusCircle,
   ClipboardCheck,
   Users,
+  Compass,
+  Layers,
 } from "lucide-react";
 import proposalService from "../../services/proposalService";
 
 const NAV_ITEMS = {
   citizen: [
     { to: "/dashboard/citizen", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
+    { to: "/my-challenges", icon: Layers, label: "My Challenges" },
+    { to: "/challenges/new", icon: PlusCircle, label: "Submit Challenge" },
     { to: "/proposals", icon: FileText, label: "Proposals Hub" },
     { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
     { to: "/proposals/new", icon: PlusCircle, label: "Submit Proposal" },
   ],
   student: [
     { to: "/dashboard/student", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
+    { to: "/my-challenges", icon: Layers, label: "My Challenges" },
     { to: "/proposals", icon: FileText, label: "Proposals Hub" },
     { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
     { to: "/proposals/new", icon: PlusCircle, label: "Submit Proposal" },
   ],
   university: [
     { to: "/dashboard/university", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
     { to: "/proposals", icon: FileText, label: "Proposals Hub" },
     { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
     { to: "/proposals/new", icon: PlusCircle, label: "Submit Proposal" },
@@ -39,11 +47,15 @@ const NAV_ITEMS = {
   ],
   industry: [
     { to: "/dashboard/industry", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
     { to: "/proposals", icon: FileText, label: "Proposals Hub" },
     { to: "/proposals/review-queue", icon: ClipboardCheck, label: "Review Queue" },
   ],
   admin: [
     { to: "/dashboard/admin", icon: LayoutDashboard, label: "Dashboard" },
+    { to: "/challenges", icon: Compass, label: "Explore Challenges" },
+    { to: "/my-challenges", icon: Layers, label: "My Challenges" },
+    { to: "/challenges/new", icon: PlusCircle, label: "Submit Challenge" },
     { to: "/proposals", icon: FileText, label: "Proposals Hub" },
     { to: "/proposals/review-queue", icon: ClipboardCheck, label: "Review Queue" },
     { to: "/proposals/my", icon: FolderKanban, label: "My Proposals" },
@@ -153,7 +165,7 @@ export default function DashboardLayout({ children, title }) {
               to={to}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
                 ${
-                  location.pathname === to
+                  location.pathname === to || (to === "/my-challenges" && location.pathname === "/challenges/my")
                     ? "bg-primary-500/20 text-primary-400 border border-primary-500/30"
                     : "text-white/50 hover:text-white hover:bg-white/5"
                 }`}

@@ -24,6 +24,12 @@ import AdminDashboard      from "./pages/dashboards/AdminDashboard";
 import MyProfile   from "./pages/profile/MyProfile";
 import EditProfile from "./pages/profile/EditProfile";
 
+// Module 2 – Societal Challenge Management
+import ChallengeExplorePage from "./pages/challenges/ChallengeExplorePage";
+import ChallengeDetailsPage from "./pages/challenges/ChallengeDetailsPage";
+import ChallengeFormPage    from "./pages/challenges/ChallengeFormPage";
+import MyChallengesPage     from "./pages/challenges/MyChallengesPage";
+
 // Module 4 – Solution Proposals & Evaluation
 import ProposalDashboard   from "./pages/proposals/ProposalDashboard";
 import MyProposals         from "./pages/proposals/MyProposals";
@@ -96,6 +102,22 @@ export default function App() {
           } />
           <Route path="/profile/edit" element={
             <ProtectedRoute><EditProfile /></ProtectedRoute>
+          } />
+
+          {/* ── Module 2: Societal Challenge Management ───── */}
+          <Route path="/challenges" element={<ChallengeExplorePage />} />
+          <Route path="/challenges/new" element={
+            <ProtectedRoute><ChallengeFormPage /></ProtectedRoute>
+          } />
+          <Route path="/challenges/my" element={
+            <ProtectedRoute><MyChallengesPage /></ProtectedRoute>
+          } />
+          <Route path="/my-challenges" element={
+            <ProtectedRoute><MyChallengesPage /></ProtectedRoute>
+          } />
+          <Route path="/challenges/:id" element={<ChallengeDetailsPage />} />
+          <Route path="/challenges/:id/edit" element={
+            <ProtectedRoute><ChallengeFormPage /></ProtectedRoute>
           } />
 
           {/* ── Module 4: Solution Proposals & Evaluation ─── */}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import {
   Layers,
@@ -21,7 +21,6 @@ import {
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import ChallengeStatusBadge from "../../components/challenges/ChallengeStatusBadge";
 import challengeService from "../../services/challengeService";
-import { useAuth } from "../../context/AuthContext";
 
 const STATUS_TABS = [
   { id: "all", label: "All Challenges" },
@@ -32,8 +31,6 @@ const STATUS_TABS = [
 ];
 
 export default function MyChallengesPage() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState(searchParams.get("status") || "all");

@@ -64,6 +64,9 @@ export default function IndustryDashboard() {
             <p className="text-white/50 text-sm">Mentor students, fund projects & build partnerships.</p>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <Link to="/challenges" className="btn-ghost text-sm">
+              Explore Challenges
+            </Link>
             <Link to="/proposals" className="btn-ghost text-sm">
               Proposals Hub
             </Link>
