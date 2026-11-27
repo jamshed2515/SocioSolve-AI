@@ -92,6 +92,73 @@ export interface UserSearchCandidate {
   organization_or_university?: string | null;
 }
 
+// ── Phase 5: Team Discussions & Comments ────────────────────────────────────
+export type DiscussionCategory =
+  | "General"
+  | "Ideas"
+  | "Technical"
+  | "Resources"
+  | "Announcements"
+  | "Questions";
+
+export interface TeamDiscussion {
+  id: string;
+  team_id: string;
+  team_name?: string;
+  author_id: string;
+  author_name: string;
+  author_email?: string;
+  author_role: string;
+  author_profile_image?: string | null;
+  title: string;
+  content: string;
+  category: DiscussionCategory | string;
+  is_pinned: boolean;
+  is_locked: boolean;
+  comment_count: number;
+  is_author: boolean;
+  is_leader: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  can_pin: boolean;
+  can_lock: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscussionListResponse {
+  items: TeamDiscussion[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface DiscussionComment {
+  id: string;
+  discussion_id: string;
+  team_id: string;
+  author_id: string;
+  author_name: string;
+  author_email?: string;
+  author_role: string;
+  author_profile_image?: string | null;
+  content: string;
+  parent_comment_id?: string | null;
+  replies_count: number;
+  replies: DiscussionComment[];
+  is_author: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommentListResponse {
+  items: DiscussionComment[];
+  total: number;
+}
+
 export interface JoinRequest {
   id: string;
   team_id: string;

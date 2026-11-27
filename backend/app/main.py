@@ -18,6 +18,7 @@ from app.routes.proposal_routes import router as proposal_router
 from app.modules.team_collaboration.router import router as team_collaboration_router
 from app.modules.team_collaboration.routers.join_request_router import router as join_request_router
 from app.modules.team_collaboration.routers.invitation_router import router as invitation_router
+from app.modules.team_collaboration.routers.discussion_router import router as discussion_router, comments_router
 from app.routes.admin_routes import router as admin_router
 from app.routes.dashboard_routes import router as dashboard_router
 
@@ -86,6 +87,16 @@ app.include_router(
     invitation_router,
     prefix="/api/invitations",
     tags=["Module 3 – Invitations"],
+)
+app.include_router(
+    discussion_router,
+    prefix="/api/discussions",
+    tags=["Module 3 – Discussions"],
+)
+app.include_router(
+    comments_router,
+    prefix="/api/comments",
+    tags=["Module 3 – Comments"],
 )
 app.include_router(
     proposal_router,

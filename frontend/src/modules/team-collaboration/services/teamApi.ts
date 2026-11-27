@@ -2,8 +2,11 @@ import axios from "axios";
 import api, { API_BASE_URL, BACKEND_ORIGIN } from "../../../services/api";
 import type {
   ChallengeOption,
+  CommentListResponse,
   CreateJoinRequestPayload,
   CreateTeamPayload,
+  DiscussionComment,
+  DiscussionListResponse,
   HealthResponse,
   InvitationListResponse,
   JoinRequest,
@@ -11,6 +14,7 @@ import type {
   JoinRequestListResponse,
   ModuleStatusResponse,
   Team,
+  TeamDiscussion,
   TeamInvitation,
   TeamListResponse,
   TeamMemberDetail,
@@ -349,6 +353,145 @@ export const teamApi = {
     const response = await api.get<UserSearchCandidate[]>("/users/search", {
       params: { q: query },
     });
+    return response.data;
+  },
+
+  // ── PHASE 5: TEAM DISCUSSIONS & COMMENTS ─────────────────────────────────
+
+  /**
+   * Create a new discussion thread in a team. Member only.
+   * POST /api/teams/{team_id}/discussions
+   */
+  async createDiscussion(
+    teamId: string,
+    payload: { title: string; content: string; category?: string }
+  ): Promise<TeamDiscussion> {
+    const response = await api.post<TeamDiscussion>(
+      `${teamApiConfig.modulePrefix}/${teamId}/discussions`,
+      payload
+    );
+    return response.data;
+  },
+
+  /**
+   * Get discussions for a team with search, category filtering, and pagination.
+   * GET /api/teams/{team_id}/discussions
+   */
+  async getTeamDiscussions(
+    teamId: string,
+    params?: {
+      category?: string;
+      search?: string;
+      sort?: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<DiscussionListResponse> {
+    const response = await api.get<DiscussionListResponse>(
+      `${teamApiConfig.modulePrefix}/${teamId}/discussions`,
+      { params }
+    );
+    return response.data;
+  },
+
+  /**
+   * Get single discussion details and permissions. Member only.
+   * GET /api/discussions/{discussion_id}
+   */
+  async getDiscussionDetails(discussionId: string): Promise<TeamDiscussion> {
+    const response = await api.get<TeamDiscussion>(`/discussions/${discussionId}`);
+    return response.data;
+  },
+
+  /**
+   * Update discussion title, content, or category. Author or leader only.
+   * PUT /api/discussions/{discussion_id}
+   */
+  async updateDiscussion(
+    discussionId: string,
+    payload: { title?: string; content?: string; category?: string }
+  ): Promise<TeamDiscussion> {
+    const response = await api.put<TeamDiscussion>(`/discussions/${discussionId}`, payload);
+    return response.data;
+  },
+
+  /**
+   * Delete discussion and cascade delete associated comments. Author or leader only.
+   * DELETE /api/discussions/{discussion_id}
+   */
+  async deleteDiscussion(discussionId: string): Promise<{ success: boolean; message: string }> {
+    const response = await api.delete<{ success: boolean; message: string }>(
+      `/discussions/${discussionId}`
+    );
+    return response.data;
+  },
+
+  /**
+   * Pin or unpin a discussion. Leader only.
+   * PUT /api/discussions/{discussion_id}/pin
+   */
+  async togglePinDiscussion(discussionId: string, isPinned?: boolean): Promise<TeamDiscussion> {
+    const response = await api.put<TeamDiscussion>(`/discussions/${discussionId}/pin`, null, {
+      params: isPinned !== undefined ? { is_pinned: isPinned } : undefined,
+    });
+    return response.data;
+  },
+
+  /**
+   * Lock or unlock a discussion. Leader only.
+   * PUT /api/discussions/{discussion_id}/lock
+   */
+  async toggleLockDiscussion(discussionId: string, isLocked?: boolean): Promise<TeamDiscussion> {
+    const response = await api.put<TeamDiscussion>(`/discussions/${discussionId}/lock`, null, {
+      params: isLocked !== undefined ? { is_locked: isLocked } : undefined,
+    });
+    return response.data;
+  },
+
+  /**
+   * Add a comment or reply to an unlocked discussion. Member only.
+   * POST /api/discussions/{discussion_id}/comments
+   */
+  async addComment(
+    discussionId: string,
+    payload: { content: string; parent_comment_id?: string }
+  ): Promise<DiscussionComment> {
+    const response = await api.post<DiscussionComment>(
+      `/discussions/${discussionId}/comments`,
+      payload
+    );
+    return response.data;
+  },
+
+  /**
+   * Get all comments and nested replies for a discussion.
+   * GET /api/discussions/{discussion_id}/comments
+   */
+  async getDiscussionComments(discussionId: string): Promise<CommentListResponse> {
+    const response = await api.get<CommentListResponse>(`/discussions/${discussionId}/comments`);
+    return response.data;
+  },
+
+  /**
+   * Edit own comment. Comment author only.
+   * PUT /api/comments/{comment_id}
+   */
+  async updateComment(
+    commentId: string,
+    payload: { content: string }
+  ): Promise<DiscussionComment> {
+    const response = await api.put<DiscussionComment>(`/comments/${commentId}`, payload);
+    return response.data;
+  },
+
+  /**
+   * Delete comment and any replies. Comment author or team leader only.
+   * DELETE /api/comments/{comment_id}
+   */
+  async deleteComment(commentId: string): Promise<{ success: boolean; message: string }> {
+    const response = await api.delete<{ success: boolean; message: string }>(
+      `/comments/${commentId}`
+    );
     return response.data;
   },
 };

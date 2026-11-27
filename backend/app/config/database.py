@@ -57,14 +57,8 @@ async def create_indexes():
     await db.proposal_status_history.create_index([("proposalId", 1), ("timestamp", 1)])
     await db.notifications.create_index([("userId", 1), ("createdAt", -1)])
 
-    # Module 3 – Teams & Join Requests indexes
+    # Module 3 – Teams, Join Requests, Invitations & Discussions indexes
     try:
-<<<<<<< Updated upstream
-        from app.modules.team_collaboration.models.team_model import create_team_indexes
-        from app.modules.team_collaboration.models.join_request_model import create_join_request_indexes
-        await create_team_indexes(db)
-        await create_join_request_indexes(db)
-=======
         from app.modules.team_collaboration.models.team_model import (
             create_team_indexes,
         )
@@ -74,12 +68,14 @@ async def create_indexes():
         from app.modules.team_collaboration.models.invitation_model import (
             create_invitation_indexes,
         )
+        from app.modules.team_collaboration.models.discussion_model import (
+            create_discussion_indexes,
+        )
 
         await create_team_indexes(db)
         await create_join_request_indexes(db)
         await create_invitation_indexes(db)
-
->>>>>>> Stashed changes
+        await create_discussion_indexes(db)
     except Exception as m3_err:
         logger.warning("Could not initialize Module 3 indexes: %s", m3_err)
 

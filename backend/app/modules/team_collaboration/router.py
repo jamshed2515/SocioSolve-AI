@@ -26,7 +26,13 @@ from app.modules.team_collaboration.schemas.invitation_schema import (
     TeamMemberDetailResponse,
     UserSearchItem,
 )
+from app.modules.team_collaboration.schemas.discussion_schema import (
+    DiscussionCreate,
+    DiscussionListResponse,
+    DiscussionResponse,
+)
 from app.modules.team_collaboration.services import (
+    discussion_service,
     invitation_service,
     join_request_service,
     team_service,
@@ -345,4 +351,57 @@ async def search_team_candidates(
     member_ids = {str(m.get("user_id")) for m in team.get("members", [])}
     member_ids.add(str(team.get("leader_id")))
     return [u for u in all_users if u.id not in member_ids]
+
+
+# ── Team Discussions (Phase 5) ───────────────────────────────────────────────
+@router.post(
+    "/{team_id}/discussions",
+    response_model=DiscussionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new discussion in the team",
+    tags=["Module 3 – Discussions"],
+)
+async def create_team_discussion(
+    team_id: str,
+    payload: DiscussionCreate,
+    current_user: dict = Depends(get_current_user),
+) -> DiscussionResponse:
+    """Create a new discussion thread. User must be a member of the team."""
+    db = get_database()
+    return await discussion_service.create_discussion(
+        db=db,
+        team_id_str=team_id,
+        author_user=current_user,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/{team_id}/discussions",
+    response_model=DiscussionListResponse,
+    summary="Get discussions for a team",
+    tags=["Module 3 – Discussions"],
+)
+async def get_team_discussions(
+    team_id: str,
+    category: Optional[str] = Query(None, description="Filter by category (General, Ideas, Technical, etc.)"),
+    search: Optional[str] = Query(None, description="Search in title or content"),
+    sort: str = Query("latest", description="Sort order: 'latest' or 'oldest'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> DiscussionListResponse:
+    """List team discussions with pagination, category filter, and search. Member only."""
+    db = get_database()
+    return await discussion_service.get_team_discussions(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        category=category,
+        search=search,
+        sort_order=sort,
+        page=page,
+        limit=limit,
+    )
+
 

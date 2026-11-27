@@ -14,10 +14,15 @@ import {
   Inbox,
   Layers,
   Loader2,
+  Lock,
   LogOut,
   MessageSquare,
+  Pin,
+  Plus,
+  Search,
   Send,
   Shield,
+  Tag,
   Trash2,
   UserCheck,
   UserMinus,
@@ -30,8 +35,10 @@ import { useAuth } from "../../../context/AuthContext";
 import EditTeamModal from "../components/EditTeamModal";
 import RequestToJoinModal from "../components/RequestToJoinModal";
 import InviteMemberModal from "../components/InviteMemberModal";
+import CreateDiscussionModal from "../components/CreateDiscussionModal";
+import DiscussionThreadView from "../components/DiscussionThreadView";
 import teamApi from "../services/teamApi";
-import type { AuthUser, JoinRequest, Team } from "../types";
+import type { AuthUser, JoinRequest, Team, TeamDiscussion } from "../types";
 
 type DetailTab = "overview" | "members" | "requests" | "discussions" | "tasks" | "meetings";
 
@@ -40,6 +47,33 @@ const STATUS_BADGE: Record<string, string> = {
   full: "bg-amber-500/20 text-amber-300 border-amber-500/30",
   active: "bg-primary-500/20 text-primary-300 border-primary-500/30",
   completed: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+};
+
+const DISCUSSION_CATEGORIES = [
+  "all",
+  "General",
+  "Ideas",
+  "Technical",
+  "Resources",
+  "Announcements",
+  "Questions",
+];
+
+const getCategoryClass = (cat: string) => {
+  switch (cat?.toLowerCase()) {
+    case "announcements":
+      return "bg-amber-500/20 text-amber-300 border-amber-500/30";
+    case "technical":
+      return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30";
+    case "ideas":
+      return "bg-purple-500/20 text-purple-300 border-purple-500/30";
+    case "resources":
+      return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+    case "questions":
+      return "bg-rose-500/20 text-rose-300 border-rose-500/30";
+    default:
+      return "bg-primary-500/20 text-primary-300 border-primary-500/30";
+  }
 };
 
 export default function TeamDetails() {
@@ -88,6 +122,15 @@ export default function TeamDetails() {
     "Domain Expert",
   ];
 
+  // Phase 5: Discussion states
+  const [discussions, setDiscussions] = useState<TeamDiscussion[]>([]);
+  const [loadingDiscussions, setLoadingDiscussions] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [searchDiscQuery, setSearchDiscQuery] = useState("");
+  const [isCreateDiscOpen, setIsCreateDiscOpen] = useState(false);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [editingDiscussion, setEditingDiscussion] = useState<TeamDiscussion | null>(null);
+
   const fetchTeam = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -130,6 +173,30 @@ export default function TeamDetails() {
       void fetchTeamRequests();
     }
   }, [team?.is_leader, fetchTeamRequests]);
+
+  // Phase 5: Load team discussions
+  const fetchDiscussions = useCallback(async () => {
+    if (!id) return;
+    setLoadingDiscussions(true);
+    try {
+      const res = await teamApi.getTeamDiscussions(id, {
+        category: selectedCategory !== "all" ? selectedCategory : undefined,
+        search: searchDiscQuery.trim() || undefined,
+        limit: 50,
+      });
+      setDiscussions(res.items || []);
+    } catch {
+      // Non-member or error
+    } finally {
+      setLoadingDiscussions(false);
+    }
+  }, [id, selectedCategory, searchDiscQuery]);
+
+  useEffect(() => {
+    if (activeTab === "discussions") {
+      void fetchDiscussions();
+    }
+  }, [activeTab, fetchDiscussions]);
 
   // Handle Team Deletion
   const handleDeleteConfirm = async () => {
@@ -885,14 +952,201 @@ export default function TeamDetails() {
         </div>
       )}
 
-      {/* ── TAB 3: DISCUSSIONS (PLACEHOLDER FOR PHASE 4) ─────────────── */}
+      {/* ── TAB 3: DISCUSSIONS (PHASE 5) ─────────────────────────────── */}
       {activeTab === "discussions" && (
-        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15 rounded-2xl">
-          <MessageSquare size={32} className="mx-auto text-primary-400" />
-          <h3 className="text-base font-bold text-white">Real-Time Team Discussions</h3>
-          <p className="text-xs text-white/50 max-w-md mx-auto">
-            Team messaging and WebSocket / Socket.IO live threads will be implemented in Phase 4.
-          </p>
+        <div className="space-y-4">
+          {!isMember && !isLeader ? (
+            <div className="glass p-10 text-center rounded-2xl border border-white/10 space-y-3">
+              <Shield size={32} className="mx-auto text-amber-400" />
+              <h3 className="text-base font-bold text-white">Private Team Discussions</h3>
+              <p className="text-xs text-white/50 max-w-md mx-auto">
+                Discussions and threads are restricted to official squad members of {team.name}. Join the team to view and participate in discussions.
+              </p>
+              {team.user_request_status !== "pending" && !isFull && (
+                <button
+                  type="button"
+                  onClick={() => setIsJoinModalOpen(true)}
+                  className="btn btn-primary text-xs inline-flex items-center gap-1.5 mt-2"
+                >
+                  <UserPlus size={14} /> Request to Join Team
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Discussion Controls Header */}
+              <div className="glass p-4 rounded-2xl border border-white/10 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <MessageSquare size={16} className="text-primary-400" />
+                      Team Discussions ({discussions.length})
+                    </h3>
+                    <p className="text-xs text-white/45 mt-0.5">
+                      Share ideas, technical approaches, resources, and announcements.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingDiscussion(null);
+                      setIsCreateDiscOpen(true);
+                    }}
+                    className="btn btn-primary text-xs self-start sm:self-auto flex items-center gap-1.5"
+                  >
+                    <Plus size={14} /> Start Discussion
+                  </button>
+                </div>
+
+                {/* Filter & Search Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                    <input
+                      type="text"
+                      placeholder="Search discussions by title or content..."
+                      value={searchDiscQuery}
+                      onChange={(e) => setSearchDiscQuery(e.target.value)}
+                      className="input pl-9 text-xs py-2 w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Category Pills */}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-white/5 overflow-x-auto">
+                  {DISCUSSION_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-medium transition capitalize whitespace-nowrap ${
+                        selectedCategory === cat
+                          ? "bg-primary-500 text-white shadow-sm"
+                          : "text-white/60 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      {cat === "all" ? "All Categories" : cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Loading State */}
+              {loadingDiscussions && (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((n) => (
+                    <div key={n} className="glass p-5 rounded-2xl border border-white/10 animate-pulse space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="h-4 bg-white/10 rounded w-1/3" />
+                        <div className="h-4 bg-white/10 rounded w-20" />
+                      </div>
+                      <div className="h-3 bg-white/10 rounded w-2/3" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!loadingDiscussions && discussions.length === 0 && (
+                <div className="glass p-10 text-center rounded-2xl border border-white/10 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/5 text-white/40 flex items-center justify-center mx-auto">
+                    <MessageSquare size={24} />
+                  </div>
+                  <h4 className="text-sm font-semibold text-white">No discussions found</h4>
+                  <p className="text-xs text-white/40 max-w-sm mx-auto">
+                    {searchDiscQuery || selectedCategory !== "all"
+                      ? "No discussions match your filter criteria."
+                      : `No discussions have been posted in ${team.name} yet. Start the dialogue!`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingDiscussion(null);
+                      setIsCreateDiscOpen(true);
+                    }}
+                    className="btn btn-primary text-xs inline-flex items-center gap-1.5 mt-2"
+                  >
+                    <Plus size={14} /> Start First Discussion
+                  </button>
+                </div>
+              )}
+
+              {/* Discussions List */}
+              {!loadingDiscussions && discussions.length > 0 && (
+                <div className="space-y-3">
+                  {discussions.map((disc) => {
+                    const dateStr = new Date(disc.created_at).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    });
+
+                    return (
+                      <div
+                        key={disc.id}
+                        onClick={() => setActiveThreadId(disc.id)}
+                        className={`glass p-5 rounded-2xl border transition-all cursor-pointer hover:border-primary-500/40 hover:bg-white/[0.04] space-y-3 ${
+                          disc.is_pinned
+                            ? "border-amber-500/30 bg-amber-500/[0.02]"
+                            : "border-white/10 bg-white/[0.02]"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className={`badge text-[10px] font-semibold border ${getCategoryClass(disc.category)} capitalize`}>
+                              <Tag size={10} className="mr-1 inline" /> {disc.category}
+                            </span>
+                            {disc.is_pinned && (
+                              <span className="badge text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 font-semibold">
+                                <Pin size={10} className="text-amber-400" /> Pinned
+                              </span>
+                            )}
+                            {disc.is_locked && (
+                              <span className="badge text-[10px] bg-rose-500/15 text-rose-300 border border-rose-500/30 flex items-center gap-1 font-semibold">
+                                <Lock size={10} className="text-rose-400" /> Locked
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-white/40 flex items-center gap-1">
+                            <Clock size={11} /> {dateStr}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm sm:text-base font-bold text-white group-hover:text-primary-300 transition">
+                            {disc.title}
+                          </h4>
+                          <p className="text-xs text-white/60 line-clamp-2 mt-1 leading-relaxed">
+                            {disc.content}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-white/50">
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full bg-primary-500/20 text-primary-300 font-bold flex items-center justify-center text-[10px]">
+                              {disc.author_name?.[0]?.toUpperCase() || "U"}
+                            </div>
+                            <span className="text-[11px] text-white/70 font-medium">
+                              {disc.author_name || "Team Member"}
+                            </span>
+                            {disc.is_author_leader && (
+                              <span className="badge text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
+                                <Crown size={9} /> Leader
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] text-white/50">
+                            <MessageSquare size={13} className="text-primary-400" />
+                            <span>{disc.comment_count || 0} {disc.comment_count === 1 ? "comment" : "comments"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -1177,6 +1431,38 @@ export default function TeamDetails() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Phase 5: Create/Edit Discussion Modal ─────────────────────── */}
+      {team && (
+        <CreateDiscussionModal
+          isOpen={isCreateDiscOpen}
+          teamId={team.id}
+          teamName={team.name}
+          initialDiscussion={editingDiscussion}
+          onClose={() => {
+            setIsCreateDiscOpen(false);
+            setEditingDiscussion(null);
+          }}
+          onSuccess={() => void fetchDiscussions()}
+        />
+      )}
+
+      {/* ── Phase 5: Discussion Thread View Modal ─────────────────────── */}
+      {activeThreadId && (
+        <DiscussionThreadView
+          discussionId={activeThreadId}
+          onClose={() => setActiveThreadId(null)}
+          onDiscussionDeleted={() => {
+            setActiveThreadId(null);
+            void fetchDiscussions();
+          }}
+          onDiscussionUpdated={() => void fetchDiscussions()}
+          onEditDiscussion={(disc) => {
+            setEditingDiscussion(disc);
+            setIsCreateDiscOpen(true);
+          }}
+        />
       )}
     </div>
   );
