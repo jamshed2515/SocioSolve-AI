@@ -18,6 +18,13 @@ from app.routes.challenge_routes import router as challenge_router
 from app.routes.proposal_routes import router as proposal_router
 from app.modules.team_collaboration.router import router as team_collaboration_router
 from app.modules.team_collaboration.routers.join_request_router import router as join_request_router
+from app.modules.team_collaboration.routers.invitation_router import router as invitation_router
+from app.modules.team_collaboration.routers.discussion_router import router as discussion_router, comments_router
+from app.modules.team_collaboration.routers.task_router import router as task_router
+from app.modules.team_collaboration.routers.meeting_router import router as meeting_router
+from app.modules.team_collaboration.routers.milestone_router import router as milestone_router
+from app.modules.team_collaboration.routers.notification_router import router as notification_router
+from app.modules.team_collaboration.socket import sio, sio_app
 from app.routes.admin_routes import router as admin_router
 from app.routes.dashboard_routes import router as dashboard_router
 
@@ -90,12 +97,50 @@ app.include_router(
     tags=["Module 3 – Join Requests"],
 )
 app.include_router(
+    invitation_router,
+    prefix="/api/invitations",
+    tags=["Module 3 – Invitations"],
+)
+app.include_router(
+    discussion_router,
+    prefix="/api/discussions",
+    tags=["Module 3 – Discussions"],
+)
+app.include_router(
+    comments_router,
+    prefix="/api/comments",
+    tags=["Module 3 – Comments"],
+)
+app.include_router(
+    task_router,
+    prefix="/api/tasks",
+    tags=["Module 3 – Tasks"],
+)
+app.include_router(
+    meeting_router,
+    prefix="/api/meetings",
+    tags=["Module 3 – Meetings"],
+)
+app.include_router(
+    milestone_router,
+    prefix="/api/milestones",
+    tags=["Module 3 – Milestones"],
+)
+app.include_router(
+    notification_router,
+    prefix="/api/notifications",
+    tags=["Module 3 – Notifications"],
+)
+app.include_router(
     proposal_router,
     prefix="/api/proposals",
     tags=["Module 4 - Proposals & Evaluation"],
 )
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboards"])
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
+
+# ── Mount Socket.IO real-time server at /socket.io ─────────────────────────
+app.mount("/socket.io", sio_app)
 
 
 @app.get("/", tags=["Health"])

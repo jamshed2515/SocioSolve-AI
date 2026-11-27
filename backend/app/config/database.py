@@ -70,7 +70,8 @@ async def create_indexes():
         [("userId", 1), ("createdAt", -1)]
     )
 
-    # Module 3 – Teams & Join Requests indexes
+    # Module 3 – Teams, Join Requests, Invitations, Discussions,
+    # Tasks, Meetings, Milestones & Notifications
     try:
         from app.modules.team_collaboration.models.team_model import (
             create_team_indexes,
@@ -78,9 +79,33 @@ async def create_indexes():
         from app.modules.team_collaboration.models.join_request_model import (
             create_join_request_indexes,
         )
+        from app.modules.team_collaboration.models.invitation_model import (
+            create_invitation_indexes,
+        )
+        from app.modules.team_collaboration.models.discussion_model import (
+            create_discussion_indexes,
+        )
+        from app.modules.team_collaboration.models.task_model import (
+            create_task_indexes,
+        )
+        from app.modules.team_collaboration.models.meeting_model import (
+            create_meeting_indexes,
+        )
+        from app.modules.team_collaboration.models.milestone_model import (
+            create_milestone_indexes,
+        )
+        from app.modules.team_collaboration.models.notification_model import (
+            create_notification_indexes,
+        )
 
         await create_team_indexes(db)
         await create_join_request_indexes(db)
+        await create_invitation_indexes(db)
+        await create_discussion_indexes(db)
+        await create_task_indexes(db)
+        await create_meeting_indexes(db)
+        await create_milestone_indexes(db)
+        await create_notification_indexes(db)
 
     except Exception as m3_err:
         logger.warning(

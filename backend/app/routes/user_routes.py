@@ -1,9 +1,13 @@
 """
 User / Profile routes - /api/users/*  (all require a verified Firebase token)
 """
-from fastapi import APIRouter, Depends, UploadFile, File
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 
+from app.config.database import get_database
 from app.middleware.auth_middleware import require_active_user
+from app.modules.team_collaboration.schemas.invitation_schema import UserSearchItem
+from app.modules.team_collaboration.services import invitation_service
 from app.schemas.profile_schema import (
     UserProfileResponse,
     UpdateProfileRequest,
@@ -40,3 +44,17 @@ async def change_password(payload: ChangePasswordRequest, current_user: dict = D
 @router.put("/profile-image", response_model=ProfileImageResponse)
 async def update_profile_image(file: UploadFile = File(...), current_user: dict = Depends(require_active_user)):
     return await profile_service.upload_profile_image(current_user, file)
+
+
+@router.get("/search", response_model=List[UserSearchItem])
+async def search_users(
+    q: str = Query(..., min_length=1, description="Search term for name or email"),
+    limit: int = Query(15, ge=1, le=50),
+    current_user: dict = Depends(require_active_user),
+):
+    """Search registered platform users by name or email for collaboration and invitations."""
+    db = get_database()
+    current_user_id = str(current_user["_id"])
+    return await invitation_service.search_platform_users(
+        db=db, query=q, current_user_id=current_user_id, limit=limit
+    )

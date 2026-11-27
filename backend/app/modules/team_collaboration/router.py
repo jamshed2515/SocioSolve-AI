@@ -19,7 +19,42 @@ from app.modules.team_collaboration.schemas.team_schema import (
     TeamUpdate,
 )
 from app.modules.team_collaboration.schemas.join_request_schema import JoinRequestListResponse
-from app.modules.team_collaboration.services import team_service, join_request_service
+from app.modules.team_collaboration.schemas.invitation_schema import (
+    ChangeRoleRequest,
+    CreateInvitationRequest,
+    InvitationResponse,
+    TeamMemberDetailResponse,
+    UserSearchItem,
+)
+from app.modules.team_collaboration.schemas.discussion_schema import (
+    DiscussionCreate,
+    DiscussionListResponse,
+    DiscussionResponse,
+)
+from app.modules.team_collaboration.schemas.task_schema import (
+    TaskCreate,
+    TaskListResponse,
+    TaskResponse,
+)
+from app.modules.team_collaboration.schemas.meeting_schema import (
+    MeetingCreate,
+    MeetingListResponse,
+    MeetingResponse,
+)
+from app.modules.team_collaboration.schemas.milestone_schema import (
+    MilestoneCreate,
+    MilestoneListResponse,
+    MilestoneResponse,
+)
+from app.modules.team_collaboration.services import (
+    discussion_service,
+    invitation_service,
+    join_request_service,
+    meeting_service,
+    milestone_service,
+    task_service,
+    team_service,
+)
 from app.modules.team_collaboration.services.database_service import (
     check_database_readiness,
 )
@@ -208,3 +243,347 @@ async def get_team_join_requests(
     return await join_request_service.get_team_join_requests(
         db=db, team_id=team_id, leader_user_id=leader_user_id, status_filter=status
     )
+
+
+# ── Team Invitations (Phase 4) ───────────────────────────────────────────────
+@router.post(
+    "/{team_id}/invitations",
+    response_model=InvitationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Invite a user to join the team (Leader only)",
+    tags=["Module 3 – Teams"],
+)
+async def invite_member(
+    team_id: str,
+    payload: CreateInvitationRequest,
+    current_user: dict = Depends(get_current_user),
+) -> InvitationResponse:
+    """Send an invitation to join the team. Restricted to the team leader."""
+    db = get_database()
+    return await invitation_service.send_team_invitation(
+        db=db,
+        team_id_str=team_id,
+        inviter_user=current_user,
+        payload=payload,
+    )
+
+
+# ── Team Member Management (Phase 4) ─────────────────────────────────────────
+@router.get(
+    "/{team_id}/members",
+    response_model=List[TeamMemberDetailResponse],
+    summary="Get sanitized member profiles for a team",
+    tags=["Module 3 – Teams"],
+)
+async def get_team_members(
+    team_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> List[TeamMemberDetailResponse]:
+    """Retrieve sanitized profile details of all members in a team."""
+    db = get_database()
+    return await invitation_service.get_team_members(db=db, team_id_str=team_id)
+
+
+@router.delete(
+    "/{team_id}/members/{user_id}",
+    summary="Remove a member from the team (Leader only)",
+    tags=["Module 3 – Teams"],
+)
+async def remove_member(
+    team_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Remove a member from the team. Restricted to the team leader."""
+    db = get_database()
+    return await invitation_service.remove_team_member(
+        db=db,
+        team_id_str=team_id,
+        target_user_id_str=user_id,
+        current_user=current_user,
+    )
+
+
+@router.post(
+    "/{team_id}/leave",
+    summary="Leave a team (Members only)",
+    tags=["Module 3 – Teams"],
+)
+async def leave_team(
+    team_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Voluntarily leave a team. Team leader must transfer leadership first."""
+    db = get_database()
+    return await invitation_service.leave_team(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+    )
+
+
+@router.put(
+    "/{team_id}/members/{user_id}/role",
+    summary="Change a member's role (Leader only)",
+    tags=["Module 3 – Teams"],
+)
+async def change_member_role(
+    team_id: str,
+    user_id: str,
+    payload: ChangeRoleRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Change the role of a team member. Restricted to the team leader."""
+    db = get_database()
+    return await invitation_service.change_member_role(
+        db=db,
+        team_id_str=team_id,
+        target_user_id_str=user_id,
+        new_role=payload.role,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/candidate-users",
+    response_model=List[UserSearchItem],
+    summary="Search users eligible for team invitation",
+    tags=["Module 3 – Teams"],
+)
+async def search_team_candidates(
+    team_id: str,
+    q: str = Query(..., min_length=1, description="Search by name or email"),
+    current_user: dict = Depends(get_current_user),
+) -> List[UserSearchItem]:
+    """Search users to invite to a team, filtering out current members and the leader."""
+    db = get_database()
+    all_users = await invitation_service.search_platform_users(
+        db=db,
+        query=q,
+        current_user_id=str(current_user["_id"]),
+    )
+    # Filter out existing members
+    team = await db.teams.find_one({"_id": invitation_service._to_oid(team_id, "Team ID")})
+    if not team:
+        return all_users
+    member_ids = {str(m.get("user_id")) for m in team.get("members", [])}
+    member_ids.add(str(team.get("leader_id")))
+    return [u for u in all_users if u.id not in member_ids]
+
+
+# ── Team Discussions (Phase 5) ───────────────────────────────────────────────
+@router.post(
+    "/{team_id}/discussions",
+    response_model=DiscussionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new discussion in the team",
+    tags=["Module 3 – Discussions"],
+)
+async def create_team_discussion(
+    team_id: str,
+    payload: DiscussionCreate,
+    current_user: dict = Depends(get_current_user),
+) -> DiscussionResponse:
+    """Create a new discussion thread. User must be a member of the team."""
+    db = get_database()
+    return await discussion_service.create_discussion(
+        db=db,
+        team_id_str=team_id,
+        author_user=current_user,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/{team_id}/discussions",
+    response_model=DiscussionListResponse,
+    summary="Get discussions for a team",
+    tags=["Module 3 – Discussions"],
+)
+async def get_team_discussions(
+    team_id: str,
+    category: Optional[str] = Query(None, description="Filter by category (General, Ideas, Technical, etc.)"),
+    search: Optional[str] = Query(None, description="Search in title or content"),
+    sort: str = Query("latest", description="Sort order: 'latest' or 'oldest'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> DiscussionListResponse:
+    """List team discussions with pagination, category filter, and search. Member only."""
+    db = get_database()
+    return await discussion_service.get_team_discussions(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        category=category,
+        search=search,
+        sort_order=sort,
+        page=page,
+        limit=limit,
+    )
+
+
+# ── Team Tasks (Phase 6) ─────────────────────────────────────────────────────
+@router.post(
+    "/{team_id}/tasks",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new task in the team (Leader only)",
+    tags=["Module 3 – Tasks"],
+)
+async def create_team_task(
+    team_id: str,
+    payload: TaskCreate,
+    current_user: dict = Depends(get_current_user),
+) -> TaskResponse:
+    """Create a new task for the team. Restricted to team leader."""
+    db = get_database()
+    return await task_service.create_task(
+        db=db,
+        team_id_str=team_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/tasks",
+    response_model=TaskListResponse,
+    summary="Get tasks for a team",
+    tags=["Module 3 – Tasks"],
+)
+async def get_team_tasks(
+    team_id: str,
+    search: Optional[str] = Query(None, description="Search in task title"),
+    status: Optional[str] = Query(None, description="Filter by status (todo, in_progress, review, completed)"),
+    priority: Optional[str] = Query(None, description="Filter by priority (low, medium, high, urgent)"),
+    assigned_to: Optional[str] = Query(None, description="Filter by assigned user ID"),
+    sort_by: str = Query("due_date", description="Sort by 'due_date' or 'created_at'"),
+    sort_order: str = Query("asc", description="Sort order: 'asc' or 'desc'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> TaskListResponse:
+    """List team tasks with filtering and pagination. Restricted to team members."""
+    db = get_database()
+    return await task_service.get_team_tasks(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+        search=search,
+        status_filter=status,
+        priority_filter=priority,
+        assigned_to=assigned_to,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
+# ── Team Meetings (Phase 7 Part A) ──────────────────────────────────────────
+@router.post(
+    "/{team_id}/meetings",
+    response_model=MeetingResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Schedule a team meeting (Leader only)",
+    tags=["Module 3 – Meetings"],
+)
+async def create_team_meeting(
+    team_id: str,
+    payload: MeetingCreate,
+    current_user: dict = Depends(get_current_user),
+) -> MeetingResponse:
+    """Schedule a meeting for the team. Restricted to team leader."""
+    db = get_database()
+    return await meeting_service.create_meeting(
+        db=db,
+        team_id_str=team_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/meetings",
+    response_model=MeetingListResponse,
+    summary="Get meetings for a team",
+    tags=["Module 3 – Meetings"],
+)
+async def get_team_meetings(
+    team_id: str,
+    status: Optional[str] = Query(None, description="Filter by status (scheduled, completed, cancelled)"),
+    timeframe: Optional[str] = Query(None, description="Filter by timeframe ('upcoming' or 'past')"),
+    sort_order: str = Query("asc", description="Sort order: 'asc' or 'desc'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> MeetingListResponse:
+    """List team meetings with status/timeframe filtering and pagination. Team members only."""
+    db = get_database()
+    return await meeting_service.get_team_meetings(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+        status_filter=status,
+        timeframe=timeframe,
+        sort_order=sort_order,
+    )
+
+
+# ── Team Milestones (Phase 7 Part B) ────────────────────────────────────────
+@router.post(
+    "/{team_id}/milestones",
+    response_model=MilestoneResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a team milestone (Leader only)",
+    tags=["Module 3 – Milestones"],
+)
+async def create_team_milestone(
+    team_id: str,
+    payload: MilestoneCreate,
+    current_user: dict = Depends(get_current_user),
+) -> MilestoneResponse:
+    """Create a new project milestone for the team. Restricted to team leader."""
+    db = get_database()
+    return await milestone_service.create_milestone(
+        db=db,
+        team_id_str=team_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/milestones",
+    response_model=MilestoneListResponse,
+    summary="Get milestones for a team",
+    tags=["Module 3 – Milestones"],
+)
+async def get_team_milestones(
+    team_id: str,
+    status: Optional[str] = Query(None, description="Filter by status (pending, in_progress, completed, overdue)"),
+    search: Optional[str] = Query(None, description="Search in milestone title"),
+    sort_order: str = Query("asc", description="Sort order: 'asc' or 'desc'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> MilestoneListResponse:
+    """List team milestones with status filtering, search, and pagination. Team members only."""
+    db = get_database()
+    return await milestone_service.get_team_milestones(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+        status_filter=status,
+        search=search,
+        sort_order=sort_order,
+    )
+
+
+
+

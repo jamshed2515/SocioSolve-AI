@@ -22,6 +22,21 @@ class TeamStatus(str, Enum):
 class MemberRole(str, Enum):
     LEADER = "Team Leader"
     MEMBER = "Member"
+    CO_LEADER = "Co-Leader"
+    DEVELOPER = "Developer"
+    RESEARCHER = "Researcher"
+    DESIGNER = "Designer"
+    DOMAIN_EXPERT = "Domain Expert"
+
+
+ASSIGNABLE_MEMBER_ROLES = [
+    MemberRole.MEMBER.value,
+    MemberRole.CO_LEADER.value,
+    MemberRole.DEVELOPER.value,
+    MemberRole.RESEARCHER.value,
+    MemberRole.DESIGNER.value,
+    MemberRole.DOMAIN_EXPERT.value,
+]
 
 
 def new_member_document(user_id: ObjectId, role: MemberRole = MemberRole.MEMBER) -> Dict[str, Any]:

@@ -11,6 +11,88 @@
 
 ---
 
+## 📦 Module 3 – Team Formation & Collaboration
+
+**Developer:** Member 3  
+**Stack:** Python · FastAPI · Pydantic · MongoDB · React · Vite · Tailwind CSS · Socket.IO (python-socketio) · JWT / RBAC
+
+Full lifecycle team formation, invitation workflows, join requests, threaded discussions with replies, task management boards with sprint progress, meeting scheduling with calendar sync, milestone tracking with linked tasks, persistent in-app notifications, and real-time Socket.IO collaboration.
+
+### Module 3 API Endpoints
+
+| Resource | Method | Endpoint | Description |
+|----------|--------|----------|-------------|
+| **Teams** | POST | `/api/teams` | Create new innovation team (creator becomes leader) |
+| | GET | `/api/teams` | Explore/search teams with filters (challenge, status, query) |
+| | GET | `/api/teams/my` | Get teams user leads or belongs to |
+| | GET | `/api/teams/{id}` | Get detailed team workspace & roster metadata |
+| | PUT | `/api/teams/{id}` | Edit team mission, capacity, or details (leader only) |
+| | DELETE | `/api/teams/{id}` | Disband/delete team (leader only) |
+| **Join Requests** | POST | `/api/join-requests` | Submit application to join a recruiting team |
+| | GET | `/api/join-requests/my` | View status of sent join requests |
+| | DELETE | `/api/join-requests/{id}` | Cancel pending join request |
+| | GET | `/api/teams/{id}/join-requests` | View received applications (leader only) |
+| | PATCH | `/api/join-requests/{id}` | Accept or reject join request (leader only) |
+| **Invitations** | POST | `/api/teams/{id}/invitations` | Invite platform user to team (leader only) |
+| | GET | `/api/invitations/my` | View received team invitations |
+| | GET | `/api/teams/{id}/invitations` | View pending invitations sent by team (leader only) |
+| | PATCH | `/api/invitations/{id}` | Accept or reject received invitation |
+| | DELETE | `/api/invitations/{id}` | Cancel pending invitation (leader only) |
+| | GET | `/api/teams/{id}/members` | View sanitized member profiles & roles |
+| | DELETE | `/api/teams/{id}/members/{user_id}` | Remove member from team (leader only) |
+| | POST | `/api/teams/{id}/leave` | Voluntary member leave |
+| | PATCH | `/api/teams/{id}/members/{user_id}/role` | Assign role (Co-Leader, Developer, etc.) |
+| **Discussions** | POST | `/api/teams/{id}/discussions` | Create team discussion channel |
+| | GET | `/api/teams/{id}/discussions` | List discussions with category & search filters |
+| | GET | `/api/discussions/{id}` | Get discussion thread with replies |
+| | PUT | `/api/discussions/{id}` | Edit discussion (author or leader) |
+| | DELETE | `/api/discussions/{id}` | Delete discussion & cascade comments |
+| | PATCH | `/api/discussions/{id}/pin` | Pin/unpin thread (leader only) |
+| | PATCH | `/api/discussions/{id}/lock` | Lock/unlock thread (leader only) |
+| **Comments** | POST | `/api/discussions/{id}/comments` | Post comment or nested reply |
+| | PUT | `/api/comments/{id}` | Edit comment (author only) |
+| | DELETE | `/api/comments/{id}` | Delete comment & replies (author/leader) |
+| **Tasks** | POST | `/api/teams/{id}/tasks` | Create task and assign members (leader only) |
+| | GET | `/api/teams/{id}/tasks` | List team tasks (filter by status/priority/assignee) |
+| | GET | `/api/tasks/my` | Cross-team task dashboard for current user |
+| | GET | `/api/tasks/{id}` | Get task details & assignee permissions |
+| | PUT | `/api/tasks/{id}` | Edit task details & deadlines (leader/creator) |
+| | PATCH | `/api/tasks/{id}/status` | Transition status (`todo` -> `in_progress` -> `review` -> `completed`) |
+| | PATCH | `/api/tasks/{id}/progress` | Update completion percentage (0-100) |
+| | PATCH | `/api/tasks/{id}/assign` | Reassign task members (leader only) |
+| | DELETE | `/api/tasks/{id}` | Delete task permanently (leader/creator) |
+| **Meetings** | POST | `/api/teams/{id}/meetings` | Schedule sync or mentor review (leader only) |
+| | GET | `/api/teams/{id}/meetings` | List team meetings with upcoming/status filters |
+| | GET | `/api/meetings/my` | Cross-team meeting agenda for current user |
+| | GET | `/api/meetings/{id}` | Get meeting details, agenda & video link |
+| | PUT | `/api/meetings/{id}` | Update meeting date, time or location (leader only) |
+| | PATCH | `/api/meetings/{id}/cancel` | Cancel meeting with notification (leader only) |
+| | DELETE | `/api/meetings/{id}` | Delete meeting permanently (leader only) |
+| **Milestones** | POST | `/api/teams/{id}/milestones` | Create milestone linked to team tasks (leader only) |
+| | GET | `/api/teams/{id}/milestones` | List team milestones with progress status |
+| | GET | `/api/milestones/{id}` | Get milestone details & linked deliverables |
+| | PUT | `/api/milestones/{id}` | Edit milestone target due date or description (leader only) |
+| | PATCH | `/api/milestones/{id}/progress` | Update milestone completion progress (leader only) |
+| | DELETE | `/api/milestones/{id}` | Delete milestone permanently (leader only) |
+| **Notifications** | GET | `/api/notifications` | Paginated in-app persistent notifications |
+| | GET | `/api/notifications/unread-count` | Unread badge count for header bell |
+| | PATCH | `/api/notifications/read-all` | Mark all notifications as read |
+| | PATCH | `/api/notifications/{id}/read` | Mark single notification as read |
+| | DELETE | `/api/notifications/read` | Bulk clear read notifications |
+| | DELETE | `/api/notifications/{id}` | Delete single notification |
+
+### Real-Time Socket.IO Collaboration (`/socket.io`)
+- **Connection Handshake**: Token authenticated via JWT query string or `auth: { token }`.
+- **Private Room**: `user:{user_id}` receives live notifications (`notification:new`, `notification:read`, `notification:count_updated`).
+- **Team Room**: `team:{team_id}` authorized to members only; broadcasts:
+  - Discussions: `discussion:created`, `discussion:deleted`, `comment:created`, `comment:updated`, `comment:deleted`
+  - Tasks: `task:created`, `task:updated`, `task:deleted`
+  - Meetings: `meeting:scheduled`, `meeting:updated`, `meeting:cancelled`, `meeting:deleted`
+  - Milestones: `milestone:created`, `milestone:updated`, `milestone:deleted`
+- **Graceful Fallback**: If real-time disconnects, all operations persist via REST APIs.
+
+---
+
 ## 📦 Module 4 – Solution Proposals & Evaluation
 
 **Developer:** Gudiya Kumari (Member 4)  
