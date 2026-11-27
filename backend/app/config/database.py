@@ -59,10 +59,27 @@ async def create_indexes():
 
     # Module 3 – Teams & Join Requests indexes
     try:
+<<<<<<< Updated upstream
         from app.modules.team_collaboration.models.team_model import create_team_indexes
         from app.modules.team_collaboration.models.join_request_model import create_join_request_indexes
         await create_team_indexes(db)
         await create_join_request_indexes(db)
+=======
+        from app.modules.team_collaboration.models.team_model import (
+            create_team_indexes,
+        )
+        from app.modules.team_collaboration.models.join_request_model import (
+            create_join_request_indexes,
+        )
+        from app.modules.team_collaboration.models.invitation_model import (
+            create_invitation_indexes,
+        )
+
+        await create_team_indexes(db)
+        await create_join_request_indexes(db)
+        await create_invitation_indexes(db)
+
+>>>>>>> Stashed changes
     except Exception as m3_err:
         logger.warning("Could not initialize Module 3 indexes: %s", m3_err)
 

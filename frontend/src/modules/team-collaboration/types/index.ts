@@ -42,6 +42,55 @@ export interface Team {
 }
 
 export type JoinRequestStatus = "pending" | "accepted" | "rejected" | "cancelled";
+export type InvitationStatus = "pending" | "accepted" | "rejected" | "cancelled";
+
+export interface TeamInvitation {
+  id: string;
+  team_id: string;
+  team_name?: string;
+  team_status?: TeamStatus;
+  challenge_title?: string;
+  member_count?: number;
+  max_members?: number;
+  inviter_id: string;
+  inviter_name?: string;
+  inviter_email?: string;
+  invitee_id: string;
+  invitee_name?: string;
+  invitee_email?: string;
+  invitee_profile_image?: string | null;
+  invitee_skills?: string[];
+  message?: string | null;
+  status: InvitationStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvitationListResponse {
+  items: TeamInvitation[];
+  total: number;
+}
+
+export interface TeamMemberDetail {
+  user_id: string;
+  name: string;
+  email?: string;
+  role: string;
+  joined_at: string;
+  skills?: string[];
+  profile_image?: string | null;
+  organization_or_university?: string | null;
+}
+
+export interface UserSearchCandidate {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  skills?: string[];
+  profile_image?: string | null;
+  organization_or_university?: string | null;
+}
 
 export interface JoinRequest {
   id: string;

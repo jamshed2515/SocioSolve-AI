@@ -37,7 +37,7 @@ const TEAM_NAV_ITEMS: TeamNavItem[] = [
   { to: "/teams/my-teams", label: "My Teams", icon: Users },
   { to: "/teams/explore", label: "Explore Teams", icon: Compass },
   { to: "/teams/requests", label: "My Applications", icon: Clock },
-  { to: "/teams/invitations", label: "Invitations", icon: Mail, badge: "2" },
+  { to: "/teams/invitations", label: "Invitations", icon: Mail },
   { to: "/teams/discussions", label: "Discussions", icon: MessageSquare },
   { to: "/teams/tasks", label: "My Tasks", icon: CheckSquare },
   { to: "/teams/meetings", label: "Meetings & Milestones", icon: CalendarClock },

@@ -19,7 +19,18 @@ from app.modules.team_collaboration.schemas.team_schema import (
     TeamUpdate,
 )
 from app.modules.team_collaboration.schemas.join_request_schema import JoinRequestListResponse
-from app.modules.team_collaboration.services import team_service, join_request_service
+from app.modules.team_collaboration.schemas.invitation_schema import (
+    ChangeRoleRequest,
+    CreateInvitationRequest,
+    InvitationResponse,
+    TeamMemberDetailResponse,
+    UserSearchItem,
+)
+from app.modules.team_collaboration.services import (
+    invitation_service,
+    join_request_service,
+    team_service,
+)
 from app.modules.team_collaboration.services.database_service import (
     check_database_readiness,
 )
@@ -208,3 +219,130 @@ async def get_team_join_requests(
     return await join_request_service.get_team_join_requests(
         db=db, team_id=team_id, leader_user_id=leader_user_id, status_filter=status
     )
+
+
+# ── Team Invitations (Phase 4) ───────────────────────────────────────────────
+@router.post(
+    "/{team_id}/invitations",
+    response_model=InvitationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Invite a user to join the team (Leader only)",
+    tags=["Module 3 – Teams"],
+)
+async def invite_member(
+    team_id: str,
+    payload: CreateInvitationRequest,
+    current_user: dict = Depends(get_current_user),
+) -> InvitationResponse:
+    """Send an invitation to join the team. Restricted to the team leader."""
+    db = get_database()
+    return await invitation_service.send_team_invitation(
+        db=db,
+        team_id_str=team_id,
+        inviter_user=current_user,
+        payload=payload,
+    )
+
+
+# ── Team Member Management (Phase 4) ─────────────────────────────────────────
+@router.get(
+    "/{team_id}/members",
+    response_model=List[TeamMemberDetailResponse],
+    summary="Get sanitized member profiles for a team",
+    tags=["Module 3 – Teams"],
+)
+async def get_team_members(
+    team_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> List[TeamMemberDetailResponse]:
+    """Retrieve sanitized profile details of all members in a team."""
+    db = get_database()
+    return await invitation_service.get_team_members(db=db, team_id_str=team_id)
+
+
+@router.delete(
+    "/{team_id}/members/{user_id}",
+    summary="Remove a member from the team (Leader only)",
+    tags=["Module 3 – Teams"],
+)
+async def remove_member(
+    team_id: str,
+    user_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Remove a member from the team. Restricted to the team leader."""
+    db = get_database()
+    return await invitation_service.remove_team_member(
+        db=db,
+        team_id_str=team_id,
+        target_user_id_str=user_id,
+        current_user=current_user,
+    )
+
+
+@router.post(
+    "/{team_id}/leave",
+    summary="Leave a team (Members only)",
+    tags=["Module 3 – Teams"],
+)
+async def leave_team(
+    team_id: str,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Voluntarily leave a team. Team leader must transfer leadership first."""
+    db = get_database()
+    return await invitation_service.leave_team(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+    )
+
+
+@router.put(
+    "/{team_id}/members/{user_id}/role",
+    summary="Change a member's role (Leader only)",
+    tags=["Module 3 – Teams"],
+)
+async def change_member_role(
+    team_id: str,
+    user_id: str,
+    payload: ChangeRoleRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Change the role of a team member. Restricted to the team leader."""
+    db = get_database()
+    return await invitation_service.change_member_role(
+        db=db,
+        team_id_str=team_id,
+        target_user_id_str=user_id,
+        new_role=payload.role,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/candidate-users",
+    response_model=List[UserSearchItem],
+    summary="Search users eligible for team invitation",
+    tags=["Module 3 – Teams"],
+)
+async def search_team_candidates(
+    team_id: str,
+    q: str = Query(..., min_length=1, description="Search by name or email"),
+    current_user: dict = Depends(get_current_user),
+) -> List[UserSearchItem]:
+    """Search users to invite to a team, filtering out current members and the leader."""
+    db = get_database()
+    all_users = await invitation_service.search_platform_users(
+        db=db,
+        query=q,
+        current_user_id=str(current_user["_id"]),
+    )
+    # Filter out existing members
+    team = await db.teams.find_one({"_id": invitation_service._to_oid(team_id, "Team ID")})
+    if not team:
+        return all_users
+    member_ids = {str(m.get("user_id")) for m in team.get("members", [])}
+    member_ids.add(str(team.get("leader_id")))
+    return [u for u in all_users if u.id not in member_ids]
+

@@ -14,10 +14,14 @@ import {
   Inbox,
   Layers,
   Loader2,
+  LogOut,
   MessageSquare,
   Send,
+  Shield,
   Trash2,
   UserCheck,
+  UserMinus,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -25,6 +29,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../../context/AuthContext";
 import EditTeamModal from "../components/EditTeamModal";
 import RequestToJoinModal from "../components/RequestToJoinModal";
+import InviteMemberModal from "../components/InviteMemberModal";
 import teamApi from "../services/teamApi";
 import type { AuthUser, JoinRequest, Team } from "../types";
 
@@ -63,6 +68,25 @@ export default function TeamDetails() {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [requestFilter, setRequestFilter] = useState<string>("pending");
   const [decidingId, setDecidingId] = useState<string | null>(null);
+
+  // Phase 4: Invitation & Member Management states
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [memberToRemove, setMemberToRemove] = useState<{ user_id: string; name?: string } | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [isLeavingTeam, setIsLeavingTeam] = useState(false);
+  const [memberToChangeRole, setMemberToChangeRole] = useState<{ user_id: string; name?: string; currentRole: string } | null>(null);
+  const [selectedNewRole, setSelectedNewRole] = useState<string>("Member");
+  const [isChangingRole, setIsChangingRole] = useState(false);
+
+  const ASSIGNABLE_ROLES = [
+    "Member",
+    "Co-Leader",
+    "Developer",
+    "Researcher",
+    "Designer",
+    "Domain Expert",
+  ];
 
   const fetchTeam = useCallback(async () => {
     if (!id) return;
@@ -175,6 +199,62 @@ export default function TeamDetails() {
     }
   };
 
+  // Phase 4: Member Removal (Leader only)
+  const handleRemoveMemberConfirm = async () => {
+    if (!team || !memberToRemove || isRemovingMember) return;
+    setIsRemovingMember(true);
+    try {
+      await teamApi.removeMember(team.id, memberToRemove.user_id);
+      toast.success(`${memberToRemove.name || "Member"} was removed from the team.`);
+      setMemberToRemove(null);
+      await fetchTeam();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to remove member.";
+      toast.error(msg);
+    } finally {
+      setIsRemovingMember(false);
+    }
+  };
+
+  // Phase 4: Leave Team (Regular member)
+  const handleLeaveTeamConfirm = async () => {
+    if (!team || isLeavingTeam) return;
+    setIsLeavingTeam(true);
+    try {
+      await teamApi.leaveTeam(team.id);
+      toast.success(`You have left '${team.name}'.`);
+      setIsLeaveModalOpen(false);
+      navigate("/teams/my-teams");
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to leave team.";
+      toast.error(msg);
+      setIsLeavingTeam(false);
+    }
+  };
+
+  // Phase 4: Change Member Role (Leader only)
+  const handleChangeRoleConfirm = async () => {
+    if (!team || !memberToChangeRole || isChangingRole) return;
+    setIsChangingRole(true);
+    try {
+      await teamApi.changeMemberRole(team.id, memberToChangeRole.user_id, selectedNewRole);
+      toast.success(`Updated role for ${memberToChangeRole.name || "member"} to '${selectedNewRole}'.`);
+      setMemberToChangeRole(null);
+      await fetchTeam();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Failed to update member role.";
+      toast.error(msg);
+    } finally {
+      setIsChangingRole(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="glass p-12 text-center space-y-3">
@@ -255,6 +335,16 @@ export default function TeamDetails() {
 
           {isLeader && (
             <>
+              {team.member_count < team.max_members && (
+                <button
+                  type="button"
+                  onClick={() => setIsInviteModalOpen(true)}
+                  className="btn-primary text-xs px-3.5 py-1.5 shadow-lg shadow-primary-500/25 flex items-center gap-1.5"
+                >
+                  <UserPlus size={13} />
+                  <span>Invite Member</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsEditOpen(true)}
@@ -270,6 +360,17 @@ export default function TeamDetails() {
                 <Trash2 size={13} className="text-red-400" /> Delete
               </button>
             </>
+          )}
+
+          {isMember && !isLeader && (
+            <button
+              type="button"
+              onClick={() => setIsLeaveModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-xs font-semibold text-red-300 transition"
+            >
+              <LogOut size={13} />
+              <span>Leave Team</span>
+            </button>
           )}
         </div>
       </div>
@@ -495,18 +596,30 @@ export default function TeamDetails() {
       {/* ── TAB 2: MEMBERS ROSTER ───────────────────────────────────── */}
       {activeTab === "members" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Users size={18} className="text-primary-400" /> Team Roster ({team.members.length})
-            </h3>
-            <span className="text-xs text-white/45">
-              Max capacity: {team.max_members} members
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Users size={18} className="text-primary-400" /> Team Roster ({team.members.length})
+              </h3>
+              <span className="text-xs text-white/45">
+                Max capacity: {team.max_members} members ({Math.max(0, team.max_members - team.members.length)} slots open)
+              </span>
+            </div>
+
+            {isLeader && team.members.length < team.max_members && (
+              <button
+                type="button"
+                onClick={() => setIsInviteModalOpen(true)}
+                className="btn btn-primary text-xs self-start sm:self-auto flex items-center gap-1.5"
+              >
+                <UserPlus size={13} /> Invite Member
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {team.members.map((member) => {
-              const isLeaderRole = member.role === "Team Leader";
+              const isLeaderRole = member.role === "Team Leader" || member.user_id === team.leader_id;
               const joinedDate = new Date(member.joined_at).toLocaleDateString(undefined, {
                 month: "short",
                 day: "numeric",
@@ -516,52 +629,88 @@ export default function TeamDetails() {
               return (
                 <div
                   key={member.user_id}
-                  className={`glass p-5 rounded-2xl border transition-all ${
+                  className={`glass p-5 rounded-2xl border transition-all flex flex-col justify-between ${
                     isLeaderRole
                       ? "border-amber-500/30 bg-amber-500/[0.04]"
                       : "border-white/10 bg-white/[0.02]"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white shrink-0 ${
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white shrink-0 ${
+                            isLeaderRole
+                              ? "bg-gradient-to-br from-amber-500 to-orange-500"
+                              : "bg-gradient-to-br from-primary-500 to-accent-400"
+                          }`}
+                        >
+                          {member.name?.[0]?.toUpperCase() || "U"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">
+                            {member.name || "Team Member"}
+                          </p>
+                          {member.email && (
+                            <p className="text-[11px] text-white/40 truncate mt-0.5">
+                              {member.email}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <span
+                        className={`badge text-[10px] font-semibold shrink-0 ${
                           isLeaderRole
-                            ? "bg-gradient-to-br from-amber-500 to-orange-500"
-                            : "bg-gradient-to-br from-primary-500 to-accent-400"
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                            : "bg-white/5 text-white/70 border border-white/10"
                         }`}
                       >
-                        {member.name?.[0]?.toUpperCase() || "U"}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">
-                          {member.name || "Team Member"}
-                        </p>
-                        {member.email && (
-                          <p className="text-[11px] text-white/40 truncate mt-0.5">
-                            {member.email}
-                          </p>
-                        )}
-                      </div>
+                        {isLeaderRole && <Crown size={10} className="mr-1 inline text-amber-400" />}
+                        {member.role}
+                      </span>
                     </div>
-
-                    <span
-                      className={`badge text-[10px] font-semibold shrink-0 ${
-                        isLeaderRole
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                          : "bg-white/5 text-white/60"
-                      }`}
-                    >
-                      {isLeaderRole && <Crown size={10} className="mr-1 inline text-amber-400" />}
-                      {member.role}
-                    </span>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[11px] text-white/40">
-                    <span>Joined: {joinedDate}</span>
-                    <span className="text-emerald-400 flex items-center gap-1">
-                      <UserCheck size={11} /> Active
-                    </span>
+                  <div className="space-y-2 mt-4 pt-3 border-t border-white/5">
+                    <div className="flex items-center justify-between text-[11px] text-white/40">
+                      <span>Joined: {joinedDate}</span>
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <UserCheck size={11} /> Active
+                      </span>
+                    </div>
+
+                    {/* Leader Controls for regular members */}
+                    {isLeader && !isLeaderRole && (
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedNewRole(member.role);
+                            setMemberToChangeRole({
+                              user_id: member.user_id,
+                              name: member.name,
+                              currentRole: member.role,
+                            });
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white text-[11px] font-medium transition flex items-center gap-1"
+                        >
+                          <Shield size={11} className="text-primary-300" /> Change Role
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMemberToRemove({
+                              user_id: member.user_id,
+                              name: member.name,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 text-[11px] font-medium transition flex items-center gap-1"
+                        >
+                          <UserMinus size={11} /> Remove
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -789,6 +938,191 @@ export default function TeamDetails() {
           onClose={() => setIsEditOpen(false)}
           onUpdated={(updated) => setTeam(updated)}
         />
+      )}
+
+      {/* ── Phase 4: Invite Member Modal ───────────────────────────── */}
+      {isInviteModalOpen && team && (
+        <InviteMemberModal
+          isOpen={isInviteModalOpen}
+          teamId={team.id}
+          teamName={team.name}
+          currentMemberCount={team.member_count}
+          maxMembers={team.max_members}
+          onClose={() => setIsInviteModalOpen(false)}
+          onSuccess={() => {
+            void fetchTeam();
+          }}
+        />
+      )}
+
+      {/* ── Phase 4: Remove Member Confirmation Modal ────────────────── */}
+      {memberToRemove && team && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+        >
+          <div className="glass max-w-md w-full p-6 sm:p-8 bg-dark-800/95 border-red-500/30 shadow-2xl relative animate-slide-up space-y-4 rounded-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 mx-auto">
+              <UserMinus size={24} />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-lg font-bold text-white">Remove Team Member</h3>
+              <p className="text-xs text-white/60 leading-relaxed">
+                Are you sure you want to remove <strong className="text-white">'{memberToRemove.name || "this member"}'</strong> from {team.name}?
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-200/90 leading-relaxed">
+              <strong>Notice:</strong> This user will lose team access and their slot will be opened for recruitment.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isRemovingMember}
+                onClick={() => setMemberToRemove(null)}
+                className="btn-ghost text-xs px-4 py-2.5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isRemovingMember}
+                onClick={handleRemoveMemberConfirm}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs transition"
+              >
+                {isRemovingMember ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Removing...
+                  </>
+                ) : (
+                  <>
+                    <UserMinus size={14} /> Remove Member
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 4: Leave Team Confirmation Modal ───────────────────── */}
+      {isLeaveModalOpen && team && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+        >
+          <div className="glass max-w-md w-full p-6 sm:p-8 bg-dark-800/95 border-amber-500/30 shadow-2xl relative animate-slide-up space-y-4 rounded-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mx-auto">
+              <LogOut size={24} />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-lg font-bold text-white">Leave Team</h3>
+              <p className="text-xs text-white/60 leading-relaxed">
+                Are you sure you want to leave <strong className="text-white">'{team.name}'</strong>?
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/90 leading-relaxed">
+              <strong>Notice:</strong> You will no longer be listed as a team member and will lose collaboration access. You can request to join again later if slots are open.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isLeavingTeam}
+                onClick={() => setIsLeaveModalOpen(false)}
+                className="btn-ghost text-xs px-4 py-2.5"
+              >
+                Stay in Team
+              </button>
+              <button
+                type="button"
+                disabled={isLeavingTeam}
+                onClick={handleLeaveTeamConfirm}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs transition"
+              >
+                {isLeavingTeam ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Leaving...
+                  </>
+                ) : (
+                  <>
+                    <LogOut size={14} /> Confirm & Leave
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Phase 4: Change Role Modal ───────────────────────────────── */}
+      {memberToChangeRole && team && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+        >
+          <div className="glass max-w-md w-full p-6 sm:p-8 bg-dark-800/95 border-primary-500/30 shadow-2xl relative animate-slide-up space-y-4 rounded-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-primary-500/20 border border-primary-500/40 flex items-center justify-center text-primary-400 mx-auto">
+              <Shield size={24} />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-lg font-bold text-white">Change Member Role</h3>
+              <p className="text-xs text-white/60 leading-relaxed">
+                Select a new functional role for <strong className="text-white">{memberToChangeRole.name || "this member"}</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white/80 block">Assign New Role:</label>
+              <select
+                value={selectedNewRole}
+                onChange={(e) => setSelectedNewRole(e.target.value)}
+                className="input text-xs w-full bg-dark-900 border-white/15"
+              >
+                {ASSIGNABLE_ROLES.map((roleName) => (
+                  <option key={roleName} value={roleName} className="bg-dark-900 text-white">
+                    {roleName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                disabled={isChangingRole}
+                onClick={() => setMemberToChangeRole(null)}
+                className="btn-ghost text-xs px-4 py-2.5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isChangingRole}
+                onClick={handleChangeRoleConfirm}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white font-semibold text-xs transition"
+              >
+                {isChangingRole ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} /> Update Role
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Delete Confirmation Modal ───────────────────────────────── */}
