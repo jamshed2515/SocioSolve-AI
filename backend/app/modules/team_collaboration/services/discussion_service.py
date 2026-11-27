@@ -27,6 +27,8 @@ from app.modules.team_collaboration.schemas.discussion_schema import (
     DiscussionResponse,
     DiscussionUpdate,
 )
+from app.modules.team_collaboration.services import notification_service
+from app.modules.team_collaboration.socket import emit_to_team
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +181,9 @@ async def create_discussion(
         result.inserted_id,
         team_oid,
     )
-    return await _enrich_discussion(db, doc, team, current_user_id=author_id_str)
+    enriched = await _enrich_discussion(db, doc, team, current_user_id=author_id_str)
+    await emit_to_team(str(team_oid), "discussion:created", enriched.model_dump(mode="json"))
+    return enriched
 
 
 async def get_team_discussions(
@@ -390,6 +394,7 @@ async def delete_discussion(
             ]
 
     logger.info("User %s deleted discussion %s and its comments", user_id_str, disc_oid)
+    await emit_to_team(str(disc["team_id"]), "discussion:deleted", {"discussion_id": discussion_id_str})
     return {
         "success": True,
         "message": "Discussion and associated comments deleted successfully.",
@@ -565,7 +570,7 @@ async def add_comment(
     author_email = current_user.get("email")
     author_profile_image = current_user.get("profile_image") or current_user.get("profileImage")
 
-    return CommentResponse(
+    comment_res = CommentResponse(
         id=str(result.inserted_id),
         discussion_id=str(disc_oid),
         team_id=str(disc["team_id"]),
@@ -584,6 +589,31 @@ async def add_comment(
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
     )
+
+    # Phase 8: Emit real-time comment and notify target author
+    await emit_to_team(str(disc["team_id"]), "comment:created", comment_res.model_dump(mode="json"))
+
+    target_recipient = parent_comment.get("author_id") if (parent_oid and parent_comment) else disc.get("author_id")
+    if target_recipient and str(target_recipient) != user_id_str:
+        notif_title = "New Reply to Your Comment" if parent_oid else "New Comment on Discussion"
+        notif_msg = (
+            f"{author_name} replied to your comment in '{disc.get('title')}'."
+            if parent_oid
+            else f"{author_name} commented on your discussion '{disc.get('title')}'."
+        )
+        await notification_service.create_notification(
+            recipient_id=target_recipient,
+            sender_id=user_oid,
+            team_id=disc["team_id"],
+            notification_type="discussion_comment",
+            title=notif_title,
+            message=notif_msg,
+            reference_id=str(disc_oid),
+            reference_type="discussion",
+            sender_name=author_name,
+        )
+
+    return comment_res
 
 
 async def get_discussion_comments(
@@ -727,7 +757,7 @@ async def update_comment(
     parent_id_str = str(comment.get("parent_comment_id")) if comment.get("parent_comment_id") else None
 
     logger.info("User %s updated comment %s", user_id_str, comment_oid)
-    return CommentResponse(
+    resp = CommentResponse(
         id=str(comment_oid),
         discussion_id=str(comment["discussion_id"]),
         team_id=str(comment["team_id"]),
@@ -744,6 +774,8 @@ async def update_comment(
         created_at=comment.get("created_at", now),
         updated_at=now,
     )
+    await emit_to_team(str(comment["team_id"]), "comment:updated", resp.model_dump(mode="json"))
+    return resp
 
 
 async def delete_comment(
@@ -789,6 +821,7 @@ async def delete_comment(
         ]
 
     logger.info("User %s deleted comment %s and its replies", user_id_str, comment_oid)
+    await emit_to_team(str(comment["team_id"]), "comment:deleted", {"comment_id": comment_id_str})
     return {
         "success": True,
         "message": "Comment deleted successfully.",

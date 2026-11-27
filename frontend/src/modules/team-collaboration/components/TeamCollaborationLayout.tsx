@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
+  Bell,
   CalendarClock,
   CheckSquare,
   Clock,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
 import { useBackendHealth } from "../hooks/useBackendHealth";
+import NotificationBell from "./NotificationBell";
 import type { AuthUser, UserRole } from "../types";
 
 interface TeamNavItem {
@@ -41,6 +43,7 @@ const TEAM_NAV_ITEMS: TeamNavItem[] = [
   { to: "/teams/discussions", label: "Discussions", icon: MessageSquare },
   { to: "/teams/tasks", label: "My Tasks", icon: CheckSquare },
   { to: "/teams/meetings", label: "Meetings & Milestones", icon: CalendarClock },
+  { to: "/teams/notifications", label: "Notifications", icon: Bell },
 ];
 
 const ROUTE_TITLES: Record<string, { title: string; subtitle: string }> = {
@@ -79,6 +82,10 @@ const ROUTE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/teams/meetings": {
     title: "Meetings & Milestones",
     subtitle: "Coordinate syncs, mentor check-ins, and challenge milestones",
+  },
+  "/teams/notifications": {
+    title: "Notifications Hub",
+    subtitle: "Real-time updates, invitations, and team activity logs",
   },
 };
 
@@ -313,7 +320,7 @@ export default function TeamCollaborationLayout() {
             </div>
           </div>
 
-          {/* Right Header Actions: Backend Health Pill + Profile Section */}
+          {/* Right Header Actions: Backend Health Pill + Notification Bell + Profile Section */}
           <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             <button
               type="button"
@@ -346,6 +353,8 @@ export default function TeamCollaborationLayout() {
                     : "API Offline"}
               </span>
             </button>
+
+            {user && <NotificationBell />}
 
             {user ? (
               <Link

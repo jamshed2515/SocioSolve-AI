@@ -19,4 +19,5 @@ class TeamCollaborationCollections(str, Enum):
     TEAM_TASKS = "team_tasks"
     TEAM_MEETINGS = "team_meetings"
     TEAM_MILESTONES = "team_milestones"
+    NOTIFICATIONS = "notifications"
 

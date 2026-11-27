@@ -22,6 +22,8 @@ from app.modules.team_collaboration.routers.discussion_router import router as d
 from app.modules.team_collaboration.routers.task_router import router as task_router
 from app.modules.team_collaboration.routers.meeting_router import router as meeting_router
 from app.modules.team_collaboration.routers.milestone_router import router as milestone_router
+from app.modules.team_collaboration.routers.notification_router import router as notification_router
+from app.modules.team_collaboration.socket import sio, sio_app
 from app.routes.admin_routes import router as admin_router
 from app.routes.dashboard_routes import router as dashboard_router
 
@@ -117,12 +119,20 @@ app.include_router(
     tags=["Module 3 – Milestones"],
 )
 app.include_router(
+    notification_router,
+    prefix="/api/notifications",
+    tags=["Module 3 – Notifications"],
+)
+app.include_router(
     proposal_router,
     prefix="/api/proposals",
     tags=["Module 4 - Proposals & Evaluation"],
 )
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboards"])
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
+
+# ── Mount Socket.IO real-time server at /socket.io ─────────────────────────
+app.mount("/socket.io", sio_app)
 
 
 @app.get("/", tags=["Health"])

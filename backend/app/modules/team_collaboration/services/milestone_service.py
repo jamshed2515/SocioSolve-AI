@@ -31,6 +31,8 @@ from app.modules.team_collaboration.schemas.milestone_schema import (
     MilestoneResponse,
     MilestoneUpdate,
 )
+from app.modules.team_collaboration.services import notification_service
+from app.modules.team_collaboration.socket import emit_to_team
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +232,9 @@ async def create_milestone(
     doc["_id"] = result.inserted_id
     logger.info("Milestone '%s' created in team %s by %s", doc["title"], team_id_str, user_id)
 
-    return await _enrich_milestone_response(db, doc, user_id)
+    res = await _enrich_milestone_response(db, doc, user_id)
+    await emit_to_team(team_id_str, "milestone:created", res.model_dump(mode="json"))
+    return res
 
 
 async def get_team_milestones(
@@ -379,7 +383,9 @@ async def update_milestone(
 
     updated_doc = await db[TeamCollaborationCollections.TEAM_MILESTONES.value].find_one({"_id": milestone_oid})
     logger.info("Milestone %s updated by leader %s", milestone_id_str, user_id)
-    return await _enrich_milestone_response(db, updated_doc, user_id)
+    res = await _enrich_milestone_response(db, updated_doc, user_id)
+    await emit_to_team(str(milestone["team_id"]), "milestone:updated", res.model_dump(mode="json"))
+    return res
 
 
 async def update_milestone_progress(
@@ -441,7 +447,28 @@ async def update_milestone_progress(
 
     updated_doc = await db[TeamCollaborationCollections.TEAM_MILESTONES.value].find_one({"_id": milestone_oid})
     logger.info("Milestone %s progress updated to %d%% by leader %s", milestone_id_str, prog, user_id)
-    return await _enrich_milestone_response(db, updated_doc, user_id)
+    res = await _enrich_milestone_response(db, updated_doc, user_id)
+
+    # Phase 8: Emit milestone:updated to team
+    await emit_to_team(str(milestone["team_id"]), "milestone:updated", res.model_dump(mode="json"))
+
+    if prog == 100:
+        for m in team.get("members", []):
+            m_uid = m.get("user_id")
+            if m_uid and str(m_uid) != user_id:
+                await notification_service.create_notification(
+                    recipient_id=m_uid,
+                    sender_id=user_id,
+                    team_id=team["_id"],
+                    notification_type="milestone_completed",
+                    title="Milestone Achieved",
+                    message=f"Milestone '{milestone.get('title')}' in team '{team.get('name')}' has reached 100% completion!",
+                    reference_id=milestone_id_str,
+                    reference_type="milestone",
+                    team_name=team.get("name"),
+                )
+
+    return res
 
 
 async def delete_milestone(
@@ -475,4 +502,5 @@ async def delete_milestone(
 
     await db[TeamCollaborationCollections.TEAM_MILESTONES.value].delete_one({"_id": milestone_oid})
     logger.info("Milestone %s deleted by leader %s", milestone_id_str, user_id)
+    await emit_to_team(str(milestone["team_id"]), "milestone:deleted", {"milestone_id": milestone_id_str})
     return {"message": "Milestone deleted successfully.", "milestone_id": milestone_id_str}

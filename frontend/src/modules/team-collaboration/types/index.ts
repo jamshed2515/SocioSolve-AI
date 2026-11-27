@@ -529,4 +529,52 @@ export interface UpdateMilestonePayload {
   status?: MilestoneStatus;
 }
 
+// ── Phase 8: Persistent Notifications & Real-Time Collaboration ──────────────
+
+export type NotificationType =
+  | "team_invitation"
+  | "join_request"
+  | "join_accepted"
+  | "join_rejected"
+  | "task_assigned"
+  | "task_completed"
+  | "discussion_comment"
+  | "meeting_scheduled"
+  | "meeting_updated"
+  | "milestone_completed"
+  | "member_added"
+  | "member_removed"
+  | "role_updated";
+
+export interface NotificationResponse {
+  id: string;
+  recipient_id: string;
+  sender_id?: string | null;
+  sender_name?: string | null;
+  team_id?: string | null;
+  team_name?: string | null;
+  type: string;
+  title: string;
+  message: string;
+  reference_id?: string | null;
+  reference_type?: string | null;
+  is_read: boolean;
+  created_at: string;
+  read_at?: string | null;
+}
+
+export interface NotificationListResponse {
+  items: NotificationResponse[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+  unread_count: number;
+}
+
+export interface UnreadCountResponse {
+  unread_count: number;
+}
+
+
 

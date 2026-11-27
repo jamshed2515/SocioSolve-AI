@@ -31,6 +31,8 @@ from app.modules.team_collaboration.schemas.meeting_schema import (
     MeetingResponse,
     MeetingUpdate,
 )
+from app.modules.team_collaboration.services import notification_service
+from app.modules.team_collaboration.socket import emit_to_team
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +284,26 @@ async def create_meeting(
     doc["_id"] = result.inserted_id
     logger.info("Meeting '%s' scheduled in team %s by %s", doc["title"], team_id_str, user_id)
 
-    return await _enrich_meeting_response(db, doc, user_id)
+    res = await _enrich_meeting_response(db, doc, user_id)
+
+    # Phase 8: Emit meeting:scheduled and notify attendees
+    await emit_to_team(team_id_str, "meeting:scheduled", res.model_dump(mode="json"))
+
+    for a_oid in attendee_oids:
+        await notification_service.create_notification(
+            recipient_id=a_oid,
+            sender_id=user_id,
+            team_id=team_oid,
+            notification_type="meeting_scheduled",
+            title="Meeting Scheduled",
+            message=f"New sync scheduled: '{doc.get('title')}' on {payload.meeting_date} ({payload.start_time} - {payload.end_time}).",
+            reference_id=str(result.inserted_id),
+            reference_type="meeting",
+            team_name=team.get("name"),
+            sender_name=current_user.get("name", "Team Leader"),
+        )
+
+    return res
 
 
 async def get_team_meetings(
@@ -517,7 +538,25 @@ async def update_meeting(
 
     updated_meeting = await db[TeamCollaborationCollections.TEAM_MEETINGS.value].find_one({"_id": meeting_oid})
     logger.info("Meeting %s updated by user %s", meeting_id_str, user_id)
-    return await _enrich_meeting_response(db, updated_meeting, user_id)
+    res = await _enrich_meeting_response(db, updated_meeting, user_id)
+
+    # Phase 8: Emit meeting:updated to team room and notify attendees
+    await emit_to_team(str(meeting["team_id"]), "meeting:updated", res.model_dump(mode="json"))
+
+    for a_oid in updated_meeting.get("attendees", []):
+        await notification_service.create_notification(
+            recipient_id=a_oid,
+            sender_id=user_id,
+            team_id=meeting.get("team_id"),
+            notification_type="meeting_updated",
+            title="Meeting Updated",
+            message=f"Meeting '{updated_meeting.get('title')}' has been updated.",
+            reference_id=meeting_id_str,
+            reference_type="meeting",
+            sender_name=current_user.get("name"),
+        )
+
+    return res
 
 
 async def cancel_meeting(
@@ -560,7 +599,25 @@ async def cancel_meeting(
 
     updated_meeting = await db[TeamCollaborationCollections.TEAM_MEETINGS.value].find_one({"_id": meeting_oid})
     logger.info("Meeting %s cancelled by user %s", meeting_id_str, user_id)
-    return await _enrich_meeting_response(db, updated_meeting, user_id)
+    res = await _enrich_meeting_response(db, updated_meeting, user_id)
+
+    # Phase 8: Emit meeting:cancelled to team room and notify attendees
+    await emit_to_team(str(meeting["team_id"]), "meeting:cancelled", res.model_dump(mode="json"))
+
+    for a_oid in meeting.get("attendees", []):
+        await notification_service.create_notification(
+            recipient_id=a_oid,
+            sender_id=user_id,
+            team_id=meeting.get("team_id"),
+            notification_type="meeting_cancelled",
+            title="Meeting Cancelled",
+            message=f"Meeting '{meeting.get('title')}' scheduled for {meeting.get('meeting_date')} has been cancelled.",
+            reference_id=meeting_id_str,
+            reference_type="meeting",
+            sender_name=current_user.get("name"),
+        )
+
+    return res
 
 
 async def delete_meeting(
@@ -601,4 +658,5 @@ async def delete_meeting(
 
     await db[TeamCollaborationCollections.TEAM_MEETINGS.value].delete_one({"_id": meeting_oid})
     logger.info("Meeting %s deleted by leader %s", meeting_id_str, user_id)
+    await emit_to_team(str(meeting["team_id"]), "meeting:deleted", {"meeting_id": meeting_id_str})
     return {"message": "Meeting deleted successfully.", "meeting_id": meeting_id_str}

@@ -28,6 +28,7 @@ from app.modules.team_collaboration.schemas.invitation_schema import (
     TeamMemberDetailResponse,
     UserSearchItem,
 )
+from app.modules.team_collaboration.services import notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,22 @@ async def send_team_invitation(
         team_oid,
         result.inserted_id,
     )
+
+    # Phase 8: Notify invited user
+    await notification_service.create_notification(
+        recipient_id=invitee_oid,
+        sender_id=inviter_oid,
+        team_id=team_oid,
+        notification_type="team_invitation",
+        title="Team Invitation Received",
+        message=f"You have been invited to join team '{team.get('name')}' by {inviter_user.get('name', 'the team leader')}.",
+        reference_id=str(result.inserted_id),
+        reference_type="invitation",
+        team_name=team.get("name"),
+        sender_name=inviter_user.get("name", "Team Leader"),
+        db=db,
+    )
+
     return await _enrich_invitation_doc(db, doc)
 
 
@@ -307,6 +324,20 @@ async def respond_to_team_invitation(
         invitation["status"] = InvitationStatus.REJECTED.value
         invitation["updated_at"] = now
         logger.info("User %s rejected invitation %s", user_oid, inv_oid)
+
+        # Phase 8: Notify team leader
+        await notification_service.create_notification(
+            recipient_id=invitation.get("inviter_id"),
+            sender_id=user_oid,
+            team_id=team_oid,
+            notification_type="join_request_rejected",
+            title="Team Invitation Declined",
+            message=f"{current_user.get('name', 'Candidate')} declined the invitation to join the team.",
+            reference_id=str(team_oid) if team_oid else None,
+            reference_type="team",
+            sender_name=current_user.get("name"),
+        )
+
         return await _enrich_invitation_doc(db, invitation)
 
     # 5. Handle Acceptance
@@ -382,6 +413,21 @@ async def respond_to_team_invitation(
     invitation["status"] = InvitationStatus.ACCEPTED.value
     invitation["updated_at"] = now
     logger.info("User %s accepted invitation %s; enrolled in team %s", user_oid, inv_oid, team_oid)
+
+    # Phase 8: Notify team leader
+    await notification_service.create_notification(
+        recipient_id=invitation.get("inviter_id"),
+        sender_id=user_oid,
+        team_id=team_oid,
+        notification_type="member_added",
+        title="Team Invitation Accepted",
+        message=f"{current_user.get('name', 'New member')} accepted your invitation and joined team '{team.get('name')}'.",
+        reference_id=str(team_oid),
+        reference_type="team",
+        team_name=team.get("name"),
+        sender_name=current_user.get("name"),
+    )
+
     return await _enrich_invitation_doc(db, invitation)
 
 
@@ -563,6 +609,21 @@ async def remove_team_member(
             )
 
     logger.info("Leader %s removed member %s from team %s", leader_oid, target_oid, team_oid)
+
+    # Phase 8: Notify removed member
+    await notification_service.create_notification(
+        recipient_id=target_oid,
+        sender_id=leader_oid,
+        team_id=team_oid,
+        notification_type="member_removed",
+        title="Removed from Team",
+        message=f"You have been removed from team '{team.get('name')}'.",
+        reference_id=str(team_oid),
+        reference_type="team",
+        team_name=team.get("name"),
+        sender_name=current_user.get("name", "Team Leader"),
+    )
+
     return {
         "success": True,
         "message": "Team member removed successfully.",
@@ -705,6 +766,21 @@ async def change_member_role(
         )
 
     logger.info("Leader %s changed role of member %s to '%s' in team %s", leader_oid, target_oid, clean_role, team_oid)
+
+    # Phase 8: Notify member of role change
+    await notification_service.create_notification(
+        recipient_id=target_oid,
+        sender_id=leader_oid,
+        team_id=team_oid,
+        notification_type="member_role_changed",
+        title="Team Role Updated",
+        message=f"Your functional role in team '{team.get('name')}' was changed to '{clean_role}'.",
+        reference_id=str(team_oid),
+        reference_type="team",
+        team_name=team.get("name"),
+        sender_name=current_user.get("name", "Team Leader"),
+    )
+
     return {
         "success": True,
         "message": f"Member role updated to '{clean_role}'.",

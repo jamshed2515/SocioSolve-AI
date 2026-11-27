@@ -29,6 +29,9 @@ import type {
   TeamMemberDetail,
   TeamMilestone,
   TeamTask,
+  NotificationListResponse,
+  NotificationResponse,
+  UnreadCountResponse,
   UpdateMeetingPayload,
   UpdateMilestonePayload,
   UpdateTaskPayload,
@@ -753,6 +756,67 @@ export const teamApi = {
    */
   async deleteMilestone(milestoneId: string): Promise<{ message: string; milestone_id: string }> {
     const response = await api.delete<{ message: string; milestone_id: string }>(`/milestones/${milestoneId}`);
+    return response.data;
+  },
+
+  // ── Phase 8: Persistent Notifications & Real-Time APIs ───────────────────
+
+  /**
+   * Get paginated notifications for authenticated user with optional filters.
+   * GET /api/notifications
+   */
+  async getNotifications(params?: {
+    is_read?: boolean;
+    type?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<NotificationListResponse> {
+    const response = await api.get<NotificationListResponse>("/notifications", { params });
+    return response.data;
+  },
+
+  /**
+   * Get unread notification count badge for header.
+   * GET /api/notifications/unread-count
+   */
+  async getUnreadCount(): Promise<UnreadCountResponse> {
+    const response = await api.get<UnreadCountResponse>("/notifications/unread-count");
+    return response.data;
+  },
+
+  /**
+   * Mark single notification as read.
+   * PATCH /api/notifications/{notification_id}/read
+   */
+  async markNotificationAsRead(notificationId: string): Promise<NotificationResponse> {
+    const response = await api.patch<NotificationResponse>(`/notifications/${notificationId}/read`);
+    return response.data;
+  },
+
+  /**
+   * Mark all unread notifications as read.
+   * PATCH /api/notifications/read-all
+   */
+  async markAllNotificationsAsRead(): Promise<{ message: string; modified_count: number }> {
+    const response = await api.patch<{ message: string; modified_count: number }>("/notifications/read-all");
+    return response.data;
+  },
+
+  /**
+   * Delete a single notification.
+   * DELETE /api/notifications/{notification_id}
+   */
+  async deleteNotification(notificationId: string): Promise<{ message: string; notification_id: string }> {
+    const response = await api.delete<{ message: string; notification_id: string }>(`/notifications/${notificationId}`);
+    return response.data;
+  },
+
+  /**
+   * Clear (bulk delete) all read notifications.
+   * DELETE /api/notifications/read
+   */
+  async clearReadNotifications(): Promise<{ message: string; deleted_count: number }> {
+    const response = await api.delete<{ message: string; deleted_count: number }>("/notifications/read");
     return response.data;
   },
 };

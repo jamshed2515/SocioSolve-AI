@@ -80,6 +80,9 @@ async def create_indexes():
         from app.modules.team_collaboration.models.milestone_model import (
             create_milestone_indexes,
         )
+        from app.modules.team_collaboration.models.notification_model import (
+            create_notification_indexes,
+        )
 
         await create_team_indexes(db)
         await create_join_request_indexes(db)
@@ -88,6 +91,7 @@ async def create_indexes():
         await create_task_indexes(db)
         await create_meeting_indexes(db)
         await create_milestone_indexes(db)
+        await create_notification_indexes(db)
     except Exception as m3_err:
         logger.warning("Could not initialize Module 3 indexes: %s", m3_err)
 

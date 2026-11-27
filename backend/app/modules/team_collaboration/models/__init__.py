@@ -29,6 +29,11 @@ from app.modules.team_collaboration.models.milestone_model import (
     new_milestone_document,
     create_milestone_indexes,
 )
+from app.modules.team_collaboration.models.notification_model import (
+    NotificationType,
+    new_notification_document,
+    create_notification_indexes,
+)
 
 __all__ = [
     "TeamCollaborationCollections",
@@ -52,5 +57,8 @@ __all__ = [
     "MilestoneStatus",
     "new_milestone_document",
     "create_milestone_indexes",
+    "NotificationType",
+    "new_notification_document",
+    "create_notification_indexes",
 ]
 

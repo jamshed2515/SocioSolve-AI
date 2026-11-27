@@ -51,6 +51,7 @@ import MeetingDetailsModal from "../components/MeetingDetailsModal";
 import CreateMilestoneModal from "../components/CreateMilestoneModal";
 import MilestoneDetailsModal from "../components/MilestoneDetailsModal";
 import teamApi from "../services/teamApi";
+import socketService from "../../../services/socketService";
 import type {
   AuthUser,
   JoinRequest,
@@ -372,6 +373,79 @@ export default function TeamDetails() {
       }
     }
   }, [activeTab, meetingSubView, fetchTeamMeetings, fetchTeamMilestones]);
+
+  // Phase 8: Real-Time Team Room & Collaboration Subscriptions
+  useEffect(() => {
+    if (!id || (!team?.is_member && !team?.is_leader)) return;
+
+    // Join authorized team collaboration room
+    socketService.joinTeam(id);
+
+    // Listen to real-time collaboration events
+    const unsubTaskCreate = socketService.on("task:created", () => {
+      void fetchTeamTasks();
+    });
+    const unsubTaskUpdate = socketService.on("task:updated", () => {
+      void fetchTeamTasks();
+    });
+    const unsubTaskDelete = socketService.on("task:deleted", () => {
+      void fetchTeamTasks();
+    });
+
+    const unsubDiscCreate = socketService.on("discussion:created", () => {
+      void fetchDiscussions();
+    });
+    const unsubDiscDelete = socketService.on("discussion:deleted", () => {
+      void fetchDiscussions();
+    });
+
+    const unsubMeetingSchedule = socketService.on("meeting:scheduled", () => {
+      void fetchTeamMeetings();
+    });
+    const unsubMeetingUpdate = socketService.on("meeting:updated", () => {
+      void fetchTeamMeetings();
+    });
+    const unsubMeetingCancel = socketService.on("meeting:cancelled", () => {
+      void fetchTeamMeetings();
+    });
+    const unsubMeetingDelete = socketService.on("meeting:deleted", () => {
+      void fetchTeamMeetings();
+    });
+
+    const unsubMilestoneCreate = socketService.on("milestone:created", () => {
+      void fetchTeamMilestones();
+    });
+    const unsubMilestoneUpdate = socketService.on("milestone:updated", () => {
+      void fetchTeamMilestones();
+    });
+    const unsubMilestoneDelete = socketService.on("milestone:deleted", () => {
+      void fetchTeamMilestones();
+    });
+
+    return () => {
+      socketService.leaveTeam(id);
+      unsubTaskCreate();
+      unsubTaskUpdate();
+      unsubTaskDelete();
+      unsubDiscCreate();
+      unsubDiscDelete();
+      unsubMeetingSchedule();
+      unsubMeetingUpdate();
+      unsubMeetingCancel();
+      unsubMeetingDelete();
+      unsubMilestoneCreate();
+      unsubMilestoneUpdate();
+      unsubMilestoneDelete();
+    };
+  }, [
+    id,
+    team?.is_member,
+    team?.is_leader,
+    fetchTeamTasks,
+    fetchDiscussions,
+    fetchTeamMeetings,
+    fetchTeamMilestones,
+  ]);
 
   // Handle Team Deletion
   const handleDeleteConfirm = async () => {

@@ -53,6 +53,7 @@ import TeamInvitations         from "./modules/team-collaboration/pages/TeamInvi
 import TeamDiscussion          from "./modules/team-collaboration/pages/TeamDiscussion";
 import TeamTasks               from "./modules/team-collaboration/pages/TeamTasks";
 import TeamMeetings            from "./modules/team-collaboration/pages/TeamMeetings";
+import NotificationsPage       from "./modules/team-collaboration/pages/NotificationsPage";
 
 export default function App() {
   return (
@@ -149,16 +150,19 @@ export default function App() {
           {/* ── Module 3: Team Formation & Collaboration ───── */}
           <Route path="/teams" element={<TeamCollaborationLayout />}>
             <Route index element={<TeamDashboard />} />
-            <Route path="my-teams"    element={<MyTeams />} />
-            <Route path="create"      element={<CreateTeam />} />
-            <Route path="explore"     element={<ExploreTeams />} />
-            <Route path="requests"    element={<MyJoinRequests />} />
-            <Route path="invitations" element={<TeamInvitations />} />
-            <Route path="discussions" element={<TeamDiscussion />} />
-            <Route path="tasks"       element={<TeamTasks />} />
-            <Route path="meetings"    element={<TeamMeetings />} />
-            <Route path=":id"         element={<TeamDetails />} />
+            <Route path="my-teams"      element={<MyTeams />} />
+            <Route path="create"        element={<CreateTeam />} />
+            <Route path="explore"       element={<ExploreTeams />} />
+            <Route path="requests"      element={<MyJoinRequests />} />
+            <Route path="invitations"   element={<TeamInvitations />} />
+            <Route path="discussions"   element={<TeamDiscussion />} />
+            <Route path="tasks"         element={<TeamTasks />} />
+            <Route path="meetings"      element={<TeamMeetings />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path=":id"           element={<TeamDetails />} />
           </Route>
+
+          <Route path="/notifications" element={<Navigate to="/teams/notifications" replace />} />
 
           {/* ── 404 fallback ───────────────────────────────── */}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -37,6 +37,8 @@ from app.modules.team_collaboration.schemas.task_schema import (
     TaskStatusUpdate,
     TaskUpdate,
 )
+from app.modules.team_collaboration.services import notification_service
+from app.modules.team_collaboration.socket import emit_to_team
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +280,26 @@ async def create_task(
     doc["_id"] = result.inserted_id
     logger.info("Task '%s' created in team %s by leader %s", doc["title"], team_id_str, user_id)
 
-    return await _enrich_task_response(db, doc, user_id)
+    enriched_res = await _enrich_task_response(db, doc, user_id)
+
+    # Phase 8: Real-time broadcast and assignee notifications
+    await emit_to_team(team_id_str, "task:created", enriched_res.model_dump(mode="json"))
+
+    for a_oid in assigned_oids:
+        await notification_service.create_notification(
+            recipient_id=a_oid,
+            sender_id=user_oid,
+            team_id=team_oid,
+            notification_type="task_assigned",
+            title="New Task Assigned",
+            message=f"You were assigned to task '{doc.get('title')}' in team '{team.get('name')}'.",
+            reference_id=str(result.inserted_id),
+            reference_type="task",
+            team_name=team.get("name"),
+            sender_name=current_user.get("name", "Team Leader"),
+        )
+
+    return enriched_res
 
 
 async def get_team_tasks(
@@ -520,7 +541,9 @@ async def update_task(
 
     updated_task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     logger.info("Task %s updated by user %s", task_id_str, user_id)
-    return await _enrich_task_response(db, updated_task, user_id)
+    res = await _enrich_task_response(db, updated_task, user_id)
+    await emit_to_team(str(task["team_id"]), "task:updated", res.model_dump(mode="json"))
+    return res
 
 
 async def update_task_status(
@@ -596,7 +619,28 @@ async def update_task_status(
 
     updated_task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     logger.info("Task %s status transitioned to '%s' by user %s", task_id_str, new_status, user_id)
-    return await _enrich_task_response(db, updated_task, user_id)
+    res = await _enrich_task_response(db, updated_task, user_id)
+
+    # Phase 8: Emit real-time update to team
+    await emit_to_team(str(task["team_id"]), "task:updated", res.model_dump(mode="json"))
+
+    # Notify creator if completed and updater is not creator
+    if new_status == TaskStatus.COMPLETED.value:
+        creator_id = task.get("created_by")
+        if creator_id and str(creator_id) != user_id:
+            await notification_service.create_notification(
+                recipient_id=creator_id,
+                sender_id=user_id,
+                team_id=task.get("team_id"),
+                notification_type="task_completed",
+                title="Task Completed",
+                message=f"Task '{task.get('title')}' in your team was marked as completed.",
+                reference_id=task_id_str,
+                reference_type="task",
+                sender_name=current_user.get("name"),
+            )
+
+    return res
 
 
 async def update_task_progress(
@@ -665,7 +709,27 @@ async def update_task_progress(
 
     updated_task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     logger.info("Task %s progress updated to %d%% by user %s", task_id_str, prog, user_id)
-    return await _enrich_task_response(db, updated_task, user_id)
+    res = await _enrich_task_response(db, updated_task, user_id)
+
+    # Phase 8: Emit real-time update to team
+    await emit_to_team(str(task["team_id"]), "task:updated", res.model_dump(mode="json"))
+
+    if prog == 100:
+        creator_id = task.get("created_by")
+        if creator_id and str(creator_id) != user_id:
+            await notification_service.create_notification(
+                recipient_id=creator_id,
+                sender_id=user_id,
+                team_id=task.get("team_id"),
+                notification_type="task_completed",
+                title="Task Completed",
+                message=f"Task '{task.get('title')}' reached 100% completion.",
+                reference_id=task_id_str,
+                reference_type="task",
+                sender_name=current_user.get("name"),
+            )
+
+    return res
 
 
 async def reassign_task(
@@ -707,7 +771,27 @@ async def reassign_task(
 
     updated_task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     logger.info("Task %s reassigned to %d members by leader %s", task_id_str, len(assigned_oids), user_id)
-    return await _enrich_task_response(db, updated_task, user_id)
+    res = await _enrich_task_response(db, updated_task, user_id)
+
+    # Phase 8: Emit real-time update to team
+    await emit_to_team(str(task["team_id"]), "task:updated", res.model_dump(mode="json"))
+
+    # Notify newly assigned members
+    old_assigned = {str(a) for a in task.get("assigned_to", [])}
+    for a_oid in assigned_oids:
+        if str(a_oid) not in old_assigned:
+            await notification_service.create_notification(
+                recipient_id=a_oid,
+                sender_id=user_id,
+                team_id=task.get("team_id"),
+                notification_type="task_assigned",
+                title="Task Assignment",
+                message=f"You have been assigned to task '{task.get('title')}'.",
+                reference_id=task_id_str,
+                reference_type="task",
+            )
+
+    return res
 
 
 async def delete_task(
@@ -744,5 +828,8 @@ async def delete_task(
 
     await db[TeamCollaborationCollections.TEAM_TASKS.value].delete_one({"_id": task_oid})
     logger.info("Task %s deleted by user %s", task_id_str, user_id)
+
+    # Phase 8: Emit real-time task deletion
+    await emit_to_team(str(task["team_id"]), "task:deleted", {"task_id": task_id_str})
 
     return {"message": "Task deleted successfully.", "task_id": task_id_str}

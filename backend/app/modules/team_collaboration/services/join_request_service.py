@@ -20,6 +20,7 @@ from app.modules.team_collaboration.schemas.join_request_schema import (
     JoinRequestListResponse,
     JoinRequestResponse,
 )
+from app.modules.team_collaboration.services import notification_service
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,21 @@ async def submit_join_request(
         team.get("name"),
         payload.team_id,
     )
+
+    # Phase 8: Notify team leader of new join request
+    await notification_service.create_notification(
+        recipient_id=team.get("leader_id"),
+        sender_id=user_id,
+        team_id=team_oid,
+        notification_type="join_request_received",
+        title="New Join Request Received",
+        message=f"{user_doc.get('name', 'A student')} requested to join your team '{team.get('name')}'.",
+        reference_id=str(res.inserted_id),
+        reference_type="join_request",
+        team_name=team.get("name"),
+        sender_name=user_doc.get("name"),
+    )
+
     return await _enrich_request_doc(db, doc)
 
 
@@ -280,6 +296,20 @@ async def decide_join_request(
         req["status"] = JoinRequestStatus.REJECTED.value
         req["updated_at"] = now
         logger.info("Leader rejected join request %s for team %s", request_id, team_oid)
+
+        # Phase 8: Notify applicant of rejection
+        await notification_service.create_notification(
+            recipient_id=req["user_id"],
+            sender_id=team.get("leader_id"),
+            team_id=team_oid,
+            notification_type="join_request_rejected",
+            title="Join Request Status",
+            message=f"Your request to join team '{team.get('name')}' was not approved at this time.",
+            reference_id=str(team_oid),
+            reference_type="team",
+            team_name=team.get("name"),
+        )
+
         return await _enrich_request_doc(db, req)
 
     # ── Acceptance Logic ────────────────────────────────────────────────────────
@@ -359,6 +389,20 @@ async def decide_join_request(
     req["updated_at"] = now
 
     logger.info("Leader accepted join request %s for team %s; member added.", request_id, team_oid)
+
+    # Phase 8: Notify applicant of acceptance
+    await notification_service.create_notification(
+        recipient_id=applicant_oid,
+        sender_id=team.get("leader_id"),
+        team_id=team_oid,
+        notification_type="join_request_accepted",
+        title="Join Request Approved",
+        message=f"Your request to join team '{team.get('name')}' was approved! You are now an active member.",
+        reference_id=str(team_oid),
+        reference_type="team",
+        team_name=team.get("name"),
+    )
+
     return await _enrich_request_doc(db, req)
 
 
