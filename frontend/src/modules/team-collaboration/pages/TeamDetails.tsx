@@ -11,8 +11,10 @@ import {
   Compass,
   Crown,
   Edit3,
+  Flag,
   Inbox,
   Layers,
+  ListTodo,
   Loader2,
   Lock,
   LogOut,
@@ -22,6 +24,7 @@ import {
   Search,
   Send,
   Shield,
+  Sliders,
   Tag,
   Trash2,
   UserCheck,
@@ -37,8 +40,10 @@ import RequestToJoinModal from "../components/RequestToJoinModal";
 import InviteMemberModal from "../components/InviteMemberModal";
 import CreateDiscussionModal from "../components/CreateDiscussionModal";
 import DiscussionThreadView from "../components/DiscussionThreadView";
+import CreateTaskModal from "../components/CreateTaskModal";
+import TaskDetailsModal from "../components/TaskDetailsModal";
 import teamApi from "../services/teamApi";
-import type { AuthUser, JoinRequest, Team, TeamDiscussion } from "../types";
+import type { AuthUser, JoinRequest, TaskPriority, TaskStatus, Team, TeamDiscussion, TeamTask } from "../types";
 
 type DetailTab = "overview" | "members" | "requests" | "discussions" | "tasks" | "meetings";
 
@@ -74,6 +79,20 @@ const getCategoryClass = (cat: string) => {
     default:
       return "bg-primary-500/20 text-primary-300 border-primary-500/30";
   }
+};
+
+const TASK_PRIORITY_BADGE: Record<string, string> = {
+  low: "bg-slate-500/15 text-slate-300 border-slate-500/30",
+  medium: "bg-primary-500/15 text-primary-300 border-primary-500/30",
+  high: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+  urgent: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+};
+
+const TASK_STATUS_BADGE: Record<string, string> = {
+  todo: "bg-white/10 text-white/70 border-white/20",
+  in_progress: "bg-primary-500/20 text-primary-300 border-primary-500/30",
+  review: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  completed: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
 };
 
 export default function TeamDetails() {
@@ -197,6 +216,42 @@ export default function TeamDetails() {
       void fetchDiscussions();
     }
   }, [activeTab, fetchDiscussions]);
+
+  // Phase 6: Task states
+  const [tasks, setTasks] = useState<TeamTask[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [searchTaskQuery, setSearchTaskQuery] = useState("");
+  const [taskStatusFilter, setTaskStatusFilter] = useState<string>("all");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>("all");
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string>("all");
+  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editingTask, setEditingTask] = useState<TeamTask | null>(null);
+
+  const fetchTeamTasks = useCallback(async () => {
+    if (!id) return;
+    setLoadingTasks(true);
+    try {
+      const res = await teamApi.getTeamTasks(id, {
+        search: searchTaskQuery.trim() || undefined,
+        status: taskStatusFilter !== "all" ? taskStatusFilter : undefined,
+        priority: taskPriorityFilter !== "all" ? taskPriorityFilter : undefined,
+        assigned_to: taskAssigneeFilter !== "all" ? taskAssigneeFilter : undefined,
+        limit: 50,
+      });
+      setTasks(res.items || []);
+    } catch {
+      // Non-member or error
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [id, searchTaskQuery, taskStatusFilter, taskPriorityFilter, taskAssigneeFilter]);
+
+  useEffect(() => {
+    if (activeTab === "tasks") {
+      void fetchTeamTasks();
+    }
+  }, [activeTab, fetchTeamTasks]);
 
   // Handle Team Deletion
   const handleDeleteConfirm = async () => {
@@ -376,6 +431,15 @@ export default function TeamDetails() {
     if (requestFilter === "all") return true;
     return r.status === requestFilter;
   });
+
+  const teamMemberOptions = [
+    ...(team.leader_id
+      ? [{ user_id: team.leader_id, name: team.leader_name || "Team Leader", role: "Leader" }]
+      : []),
+    ...(team.members || [])
+      .filter((m) => m.user_id !== team.leader_id)
+      .map((m) => ({ user_id: m.user_id, name: m.name || "Member", role: m.role || "Member" })),
+  ];
 
   return (
     <div className="space-y-6 animate-fade-in pb-16">
@@ -1150,14 +1214,294 @@ export default function TeamDetails() {
         </div>
       )}
 
-      {/* ── TAB 4: TASKS (PLACEHOLDER FOR PHASE 5) ──────────────────── */}
+      {/* ── TAB 4: TASKS (PHASE 6) ──────────────────────────────────── */}
       {activeTab === "tasks" && (
-        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15 rounded-2xl">
-          <CheckCircle2 size={32} className="mx-auto text-accent-400" />
-          <h3 className="text-base font-bold text-white">Collaborative Task Tracking</h3>
-          <p className="text-xs text-white/50 max-w-md mx-auto">
-            Task creation, assignment, and sprint deliverables will be implemented in Phase 5.
-          </p>
+        <div className="space-y-4">
+          {!isMember && !isLeader ? (
+            <div className="glass p-10 text-center rounded-2xl border border-white/10 space-y-3">
+              <Shield size={32} className="mx-auto text-amber-400" />
+              <h3 className="text-base font-bold text-white">Private Team Tasks</h3>
+              <p className="text-xs text-white/50 max-w-md mx-auto">
+                Tasks, deadlines, and sprint tracking are restricted to official squad members of {team.name}.
+              </p>
+              {team.user_request_status !== "pending" && !isFull && (
+                <button
+                  type="button"
+                  onClick={() => setIsJoinModalOpen(true)}
+                  className="btn btn-primary text-xs inline-flex items-center gap-1.5 mt-2"
+                >
+                  <UserPlus size={14} /> Request to Join Team
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Task Header & Controls */}
+              <div className="glass p-4 rounded-2xl border border-white/10 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <ListTodo size={16} className="text-primary-400" />
+                      Team Tasks & Deliverables ({tasks.length})
+                    </h3>
+                    <p className="text-xs text-white/45 mt-0.5">
+                      Organize sprint responsibilities, track progress, and monitor deadlines.
+                    </p>
+                  </div>
+
+                  {isLeader && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTask(null);
+                        setIsCreateTaskOpen(true);
+                      }}
+                      className="btn btn-primary text-xs self-start sm:self-auto flex items-center gap-1.5"
+                    >
+                      <Plus size={14} /> Create Task
+                    </button>
+                  )}
+                </div>
+
+                {/* Search & Filter Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                    <input
+                      type="text"
+                      placeholder="Search tasks by title..."
+                      value={searchTaskQuery}
+                      onChange={(e) => setSearchTaskQuery(e.target.value)}
+                      className="input pl-9 text-xs py-2 w-full"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-xs text-white/50 flex items-center gap-1">
+                      <Flag size={12} /> Priority:
+                    </span>
+                    <select
+                      value={taskPriorityFilter}
+                      onChange={(e) => setTaskPriorityFilter(e.target.value)}
+                      className="input py-1 px-2 text-xs bg-dark-800 text-white border-white/15 rounded-lg"
+                    >
+                      <option value="all">All Priorities</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-xs text-white/50 flex items-center gap-1">
+                      <Users size={12} /> Assignee:
+                    </span>
+                    <select
+                      value={taskAssigneeFilter}
+                      onChange={(e) => setTaskAssigneeFilter(e.target.value)}
+                      className="input py-1 px-2 text-xs bg-dark-800 text-white border-white/15 rounded-lg max-w-[130px] truncate"
+                    >
+                      <option value="all">All Members</option>
+                      {teamMemberOptions.map((m) => (
+                        <option key={m.user_id} value={m.user_id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Status Tabs */}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-white/5 overflow-x-auto">
+                  {[
+                    { value: "all", label: "All Tasks" },
+                    { value: "todo", label: "To Do" },
+                    { value: "in_progress", label: "In Progress" },
+                    { value: "review", label: "In Review" },
+                    { value: "completed", label: "Completed" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      onClick={() => setTaskStatusFilter(tab.value)}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-medium transition whitespace-nowrap ${
+                        taskStatusFilter === tab.value
+                          ? "bg-primary-500 text-white shadow-sm"
+                          : "text-white/60 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Loading State */}
+              {loadingTasks && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[1, 2].map((n) => (
+                    <div key={n} className="glass p-5 rounded-2xl border border-white/10 animate-pulse space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="h-4 bg-white/10 rounded w-1/3" />
+                        <div className="h-4 bg-white/10 rounded w-16" />
+                      </div>
+                      <div className="h-3 bg-white/10 rounded w-3/4" />
+                      <div className="h-2 bg-white/10 rounded w-full" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!loadingTasks && tasks.length === 0 && (
+                <div className="glass p-10 text-center rounded-2xl border border-white/10 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/5 text-white/40 flex items-center justify-center mx-auto">
+                    <ListTodo size={24} />
+                  </div>
+                  <h4 className="text-sm font-semibold text-white">No tasks found</h4>
+                  <p className="text-xs text-white/40 max-w-sm mx-auto">
+                    {searchTaskQuery || taskStatusFilter !== "all" || taskPriorityFilter !== "all" || taskAssigneeFilter !== "all"
+                      ? "No tasks match your selected filter criteria."
+                      : `No tasks have been created for ${team.name} yet.`}
+                  </p>
+                  {isLeader && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTask(null);
+                        setIsCreateTaskOpen(true);
+                      }}
+                      className="btn btn-primary text-xs inline-flex items-center gap-1.5 mt-2"
+                    >
+                      <Plus size={14} /> Create First Task
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Tasks Grid */}
+              {!loadingTasks && tasks.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {tasks.map((t) => {
+                    const hasOverdue = t.is_overdue;
+                    const dueDateFormatted = t.due_date
+                      ? new Date(t.due_date).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "No deadline";
+
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => setSelectedTaskId(t.id)}
+                        className={`glass p-5 rounded-2xl border transition-all cursor-pointer hover:border-primary-500/40 hover:bg-white/[0.04] space-y-3.5 relative overflow-hidden group ${
+                          t.status === "completed"
+                            ? "border-emerald-500/20 bg-emerald-500/[0.01]"
+                            : hasOverdue
+                            ? "border-rose-500/30 bg-rose-500/[0.02]"
+                            : "border-white/10 bg-white/[0.02]"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`badge text-[10px] uppercase font-bold border px-2 py-0.5 ${
+                                TASK_PRIORITY_BADGE[t.priority] || "bg-white/10 text-white"
+                              }`}
+                            >
+                              <Flag size={9} className="mr-1 inline" /> {t.priority}
+                            </span>
+
+                            <span
+                              className={`badge text-[10px] capitalize font-semibold border px-2 py-0.5 ${
+                                TASK_STATUS_BADGE[t.status] || "bg-white/10 text-white"
+                              }`}
+                            >
+                              {t.status.replace("_", " ")}
+                            </span>
+
+                            {hasOverdue && (
+                              <span className="badge text-[10px] bg-rose-500/20 text-rose-300 border-rose-500/30 font-bold flex items-center gap-1">
+                                <AlertCircle size={10} /> Overdue
+                              </span>
+                            )}
+                          </div>
+
+                          <span
+                            className={`text-[11px] flex items-center gap-1 ${
+                              hasOverdue ? "text-rose-400 font-bold" : "text-white/40"
+                            }`}
+                          >
+                            <Clock size={11} className={hasOverdue ? "text-rose-400" : "text-amber-400"} />
+                            {dueDateFormatted}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm sm:text-base font-bold text-white group-hover:text-primary-300 transition">
+                            {t.title}
+                          </h4>
+                          {t.description && (
+                            <p className="text-xs text-white/60 line-clamp-2 mt-1 leading-relaxed">
+                              {t.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-white/40">Progress</span>
+                            <span className="font-mono font-semibold text-white/80">{t.progress}%</span>
+                          </div>
+                          <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-300 ${
+                                t.progress === 100
+                                  ? "bg-emerald-500"
+                                  : t.progress > 50
+                                  ? "bg-primary-500"
+                                  : "bg-amber-500"
+                              }`}
+                              style={{ width: `${t.progress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
+                          <span className="text-[10px] text-white/40">
+                            By {t.creator_name || "Leader"}
+                          </span>
+
+                          <div className="flex items-center -space-x-1.5">
+                            {t.assigned_members.slice(0, 3).map((m) => (
+                              <div
+                                key={m.id}
+                                title={m.name}
+                                className="w-5 h-5 rounded-full bg-primary-500/40 border border-dark-900 text-primary-200 font-bold flex items-center justify-center text-[9px]"
+                              >
+                                {m.name?.[0]?.toUpperCase() || "U"}
+                              </div>
+                            ))}
+                            {t.assigned_members.length > 3 && (
+                              <div className="w-5 h-5 rounded-full bg-white/10 border border-dark-900 text-white/60 font-semibold flex items-center justify-center text-[9px]">
+                                +{t.assigned_members.length - 3}
+                              </div>
+                            )}
+                            {t.assigned_members.length === 0 && (
+                              <span className="text-[10px] text-white/30 italic">Unassigned</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -1461,6 +1805,37 @@ export default function TeamDetails() {
           onEditDiscussion={(disc) => {
             setEditingDiscussion(disc);
             setIsCreateDiscOpen(true);
+          }}
+        />
+      )}
+
+      {/* ── Phase 6: Create/Edit Task Modal ──────────────────────────── */}
+      {team && (
+        <CreateTaskModal
+          isOpen={isCreateTaskOpen}
+          teamId={team.id}
+          teamName={team.name}
+          members={teamMemberOptions}
+          initialTask={editingTask}
+          onClose={() => {
+            setIsCreateTaskOpen(false);
+            setEditingTask(null);
+          }}
+          onSuccess={() => void fetchTeamTasks()}
+        />
+      )}
+
+      {/* ── Phase 6: Task Details View Modal ───────────────────────────── */}
+      {selectedTaskId && (
+        <TaskDetailsModal
+          taskId={selectedTaskId}
+          teamMembers={teamMemberOptions}
+          onClose={() => setSelectedTaskId(null)}
+          onTaskUpdated={() => void fetchTeamTasks()}
+          onTaskDeleted={() => void fetchTeamTasks()}
+          onEditTask={(t) => {
+            setEditingTask(t);
+            setIsCreateTaskOpen(true);
           }}
         />
       )}

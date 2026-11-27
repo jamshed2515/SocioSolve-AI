@@ -309,3 +309,77 @@ export interface BackendHealthState {
 }
 
 export type PreviewViewState = "ready" | "loading" | "empty" | "error";
+
+// ── Phase 6: Team Tasks & Deliverables ─────────────────────────────────────────
+
+export type TaskPriority = "low" | "medium" | "high" | "urgent";
+
+export type TaskStatus = "todo" | "in_progress" | "review" | "completed";
+
+export interface AssignedMemberInfo {
+  id: string;
+  name: string;
+  email?: string | null;
+  avatar?: string | null;
+  role?: string | null;
+}
+
+export interface TaskPermissions {
+  can_edit: boolean;
+  can_delete: boolean;
+  can_update_status: boolean;
+  can_update_progress: boolean;
+  can_reassign: boolean;
+  is_leader: boolean;
+  is_assigned: boolean;
+}
+
+export interface TeamTask {
+  id: string;
+  team_id: string;
+  team_name?: string | null;
+  title: string;
+  description: string;
+  created_by: string;
+  creator_name?: string | null;
+  creator_email?: string | null;
+  assigned_to: string[];
+  assigned_members: AssignedMemberInfo[];
+  priority: TaskPriority;
+  status: TaskStatus;
+  start_date?: string | null;
+  due_date?: string | null;
+  progress: number;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+  is_overdue: boolean;
+  permissions?: TaskPermissions;
+}
+
+export interface TaskListResponse {
+  items: TeamTask[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface CreateTaskPayload {
+  title: string;
+  description?: string;
+  assigned_to?: string[];
+  priority?: TaskPriority;
+  start_date?: string | null;
+  due_date?: string | null;
+}
+
+export interface UpdateTaskPayload {
+  title?: string;
+  description?: string;
+  assigned_to?: string[];
+  priority?: TaskPriority;
+  start_date?: string | null;
+  due_date?: string | null;
+}
+

@@ -71,11 +71,15 @@ async def create_indexes():
         from app.modules.team_collaboration.models.discussion_model import (
             create_discussion_indexes,
         )
+        from app.modules.team_collaboration.models.task_model import (
+            create_task_indexes,
+        )
 
         await create_team_indexes(db)
         await create_join_request_indexes(db)
         await create_invitation_indexes(db)
         await create_discussion_indexes(db)
+        await create_task_indexes(db)
     except Exception as m3_err:
         logger.warning("Could not initialize Module 3 indexes: %s", m3_err)
 

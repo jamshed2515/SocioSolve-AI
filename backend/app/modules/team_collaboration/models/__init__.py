@@ -12,6 +12,12 @@ from app.modules.team_collaboration.models.discussion_model import (
     new_comment_document,
     create_discussion_indexes,
 )
+from app.modules.team_collaboration.models.task_model import (
+    TaskPriority,
+    TaskStatus,
+    new_task_document,
+    create_task_indexes,
+)
 
 __all__ = [
     "TeamCollaborationCollections",
@@ -24,5 +30,9 @@ __all__ = [
     "new_discussion_document",
     "new_comment_document",
     "create_discussion_indexes",
+    "TaskPriority",
+    "TaskStatus",
+    "new_task_document",
+    "create_task_indexes",
 ]
 

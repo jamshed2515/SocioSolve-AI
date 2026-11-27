@@ -19,6 +19,7 @@ from app.modules.team_collaboration.router import router as team_collaboration_r
 from app.modules.team_collaboration.routers.join_request_router import router as join_request_router
 from app.modules.team_collaboration.routers.invitation_router import router as invitation_router
 from app.modules.team_collaboration.routers.discussion_router import router as discussion_router, comments_router
+from app.modules.team_collaboration.routers.task_router import router as task_router
 from app.routes.admin_routes import router as admin_router
 from app.routes.dashboard_routes import router as dashboard_router
 
@@ -97,6 +98,11 @@ app.include_router(
     comments_router,
     prefix="/api/comments",
     tags=["Module 3 – Comments"],
+)
+app.include_router(
+    task_router,
+    prefix="/api/tasks",
+    tags=["Module 3 – Tasks"],
 )
 app.include_router(
     proposal_router,

@@ -4,6 +4,7 @@ import type {
   ChallengeOption,
   CommentListResponse,
   CreateJoinRequestPayload,
+  CreateTaskPayload,
   CreateTeamPayload,
   DiscussionComment,
   DiscussionListResponse,
@@ -13,11 +14,16 @@ import type {
   JoinRequestDecisionPayload,
   JoinRequestListResponse,
   ModuleStatusResponse,
+  TaskPriority,
+  TaskStatus,
+  TaskListResponse,
   Team,
   TeamDiscussion,
   TeamInvitation,
   TeamListResponse,
   TeamMemberDetail,
+  TeamTask,
+  UpdateTaskPayload,
   UpdateTeamPayload,
   UserSearchCandidate,
 } from "../types";
@@ -492,6 +498,108 @@ export const teamApi = {
     const response = await api.delete<{ success: boolean; message: string }>(
       `/comments/${commentId}`
     );
+    return response.data;
+  },
+
+  // ── Phase 6: Team Task Management APIs ────────────────────────────────────
+
+  /**
+   * Create a new task in a team (Team Leader only).
+   * POST /api/teams/{team_id}/tasks
+   */
+  async createTask(teamId: string, payload: CreateTaskPayload): Promise<TeamTask> {
+    const response = await api.post<TeamTask>(`/teams/${teamId}/tasks`, payload);
+    return response.data;
+  },
+
+  /**
+   * Get tasks for a team with search, filters, and pagination.
+   * GET /api/teams/{team_id}/tasks
+   */
+  async getTeamTasks(
+    teamId: string,
+    params?: {
+      search?: string;
+      status?: string;
+      priority?: string;
+      assigned_to?: string;
+      sort_by?: string;
+      sort_order?: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<TaskListResponse> {
+    const response = await api.get<TaskListResponse>(`/teams/${teamId}/tasks`, { params });
+    return response.data;
+  },
+
+  /**
+   * Get all tasks assigned to the authenticated user across teams.
+   * GET /api/tasks/my
+   */
+  async getMyTasks(params?: {
+    status?: string;
+    priority?: string;
+    sort_by?: string;
+    sort_order?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<TaskListResponse> {
+    const response = await api.get<TaskListResponse>("/tasks/my", { params });
+    return response.data;
+  },
+
+  /**
+   * Get details and permissions for a single task.
+   * GET /api/tasks/{task_id}
+   */
+  async getTaskDetails(taskId: string): Promise<TeamTask> {
+    const response = await api.get<TeamTask>(`/tasks/${taskId}`);
+    return response.data;
+  },
+
+  /**
+   * Update task details (Team Leader or creator).
+   * PUT /api/tasks/{task_id}
+   */
+  async updateTask(taskId: string, payload: UpdateTaskPayload): Promise<TeamTask> {
+    const response = await api.put<TeamTask>(`/tasks/${taskId}`, payload);
+    return response.data;
+  },
+
+  /**
+   * Update task status (Assigned members or Team Leader).
+   * PATCH /api/tasks/{task_id}/status
+   */
+  async updateTaskStatus(taskId: string, status: TaskStatus): Promise<TeamTask> {
+    const response = await api.patch<TeamTask>(`/tasks/${taskId}/status`, { status });
+    return response.data;
+  },
+
+  /**
+   * Update task progress (0-100) (Assigned members or Team Leader).
+   * PATCH /api/tasks/{task_id}/progress
+   */
+  async updateTaskProgress(taskId: string, progress: number): Promise<TeamTask> {
+    const response = await api.patch<TeamTask>(`/tasks/${taskId}/progress`, { progress });
+    return response.data;
+  },
+
+  /**
+   * Reassign task members (Team Leader only).
+   * PATCH /api/tasks/{task_id}/assign
+   */
+  async reassignTask(taskId: string, assigned_to: string[]): Promise<TeamTask> {
+    const response = await api.patch<TeamTask>(`/tasks/${taskId}/assign`, { assigned_to });
+    return response.data;
+  },
+
+  /**
+   * Delete task (Team Leader or creator).
+   * DELETE /api/tasks/{task_id}
+   */
+  async deleteTask(taskId: string): Promise<{ message: string; task_id: string }> {
+    const response = await api.delete<{ message: string; task_id: string }>(`/tasks/${taskId}`);
     return response.data;
   },
 };

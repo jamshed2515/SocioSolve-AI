@@ -31,10 +31,16 @@ from app.modules.team_collaboration.schemas.discussion_schema import (
     DiscussionListResponse,
     DiscussionResponse,
 )
+from app.modules.team_collaboration.schemas.task_schema import (
+    TaskCreate,
+    TaskListResponse,
+    TaskResponse,
+)
 from app.modules.team_collaboration.services import (
     discussion_service,
     invitation_service,
     join_request_service,
+    task_service,
     team_service,
 )
 from app.modules.team_collaboration.services.database_service import (
@@ -403,5 +409,64 @@ async def get_team_discussions(
         page=page,
         limit=limit,
     )
+
+
+# ── Team Tasks (Phase 6) ─────────────────────────────────────────────────────
+@router.post(
+    "/{team_id}/tasks",
+    response_model=TaskResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new task in the team (Leader only)",
+    tags=["Module 3 – Tasks"],
+)
+async def create_team_task(
+    team_id: str,
+    payload: TaskCreate,
+    current_user: dict = Depends(get_current_user),
+) -> TaskResponse:
+    """Create a new task for the team. Restricted to team leader."""
+    db = get_database()
+    return await task_service.create_task(
+        db=db,
+        team_id_str=team_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/tasks",
+    response_model=TaskListResponse,
+    summary="Get tasks for a team",
+    tags=["Module 3 – Tasks"],
+)
+async def get_team_tasks(
+    team_id: str,
+    search: Optional[str] = Query(None, description="Search in task title"),
+    status: Optional[str] = Query(None, description="Filter by status (todo, in_progress, review, completed)"),
+    priority: Optional[str] = Query(None, description="Filter by priority (low, medium, high, urgent)"),
+    assigned_to: Optional[str] = Query(None, description="Filter by assigned user ID"),
+    sort_by: str = Query("due_date", description="Sort by 'due_date' or 'created_at'"),
+    sort_order: str = Query("asc", description="Sort order: 'asc' or 'desc'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> TaskListResponse:
+    """List team tasks with filtering and pagination. Restricted to team members."""
+    db = get_database()
+    return await task_service.get_team_tasks(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+        search=search,
+        status_filter=status,
+        priority_filter=priority,
+        assigned_to=assigned_to,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
 
 
