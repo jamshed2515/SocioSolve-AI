@@ -50,6 +50,17 @@ def _parse_object_id(id_str: str, label: str = "ID") -> ObjectId:
     return ObjectId(id_str)
 
 
+def _extract_user_id(current_user: Dict[str, Any]) -> str:
+    """Extract string user ID whether dict has '_id' (MongoDB) or 'id' (test mocks/schemas)."""
+    val = current_user.get("_id") or current_user.get("id")
+    if not val:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication error: user ID missing.",
+        )
+    return str(val)
+
+
 def _is_team_member(team: Dict[str, Any], user_id: str) -> bool:
     if not team or not user_id:
         return False
@@ -223,7 +234,7 @@ async def create_meeting(
     Validates team existence, leader identity, attendees membership, start/end times.
     """
     team_oid = _parse_object_id(team_id_str, "team_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
     user_oid = _parse_object_id(user_id, "user_id")
 
     team = await db[TeamCollaborationCollections.TEAMS.value].find_one({"_id": team_oid})
@@ -320,7 +331,7 @@ async def get_team_meetings(
     List team meetings with status/timeframe filtering and pagination. Team members only.
     """
     team_oid = _parse_object_id(team_id_str, "team_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     team = await db[TeamCollaborationCollections.TEAMS.value].find_one({"_id": team_oid})
     if not team:
@@ -387,7 +398,7 @@ async def get_my_meetings(
     """
     Get all meetings where the user is an attendee or organizer across all teams.
     """
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
     user_oid = _parse_object_id(user_id, "user_id")
 
     query: Dict[str, Any] = {
@@ -442,7 +453,7 @@ async def get_meeting_details(
     Get single meeting details. Restricted to team members.
     """
     meeting_oid = _parse_object_id(meeting_id_str, "meeting_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     meeting = await db[TeamCollaborationCollections.TEAM_MEETINGS.value].find_one({"_id": meeting_oid})
     if not meeting:
@@ -468,7 +479,7 @@ async def update_meeting(
     Update meeting details (Leader or organizer only).
     """
     meeting_oid = _parse_object_id(meeting_id_str, "meeting_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     meeting = await db[TeamCollaborationCollections.TEAM_MEETINGS.value].find_one({"_id": meeting_oid})
     if not meeting:
@@ -566,7 +577,7 @@ async def cancel_meeting(
     Cancel a scheduled meeting (Leader or organizer).
     """
     meeting_oid = _parse_object_id(meeting_id_str, "meeting_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     meeting = await db[TeamCollaborationCollections.TEAM_MEETINGS.value].find_one({"_id": meeting_oid})
     if not meeting:
@@ -627,7 +638,7 @@ async def delete_meeting(
     Delete a meeting permanently (Leader only). Completed meetings are preserved.
     """
     meeting_oid = _parse_object_id(meeting_id_str, "meeting_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     meeting = await db[TeamCollaborationCollections.TEAM_MEETINGS.value].find_one({"_id": meeting_oid})
     if not meeting:

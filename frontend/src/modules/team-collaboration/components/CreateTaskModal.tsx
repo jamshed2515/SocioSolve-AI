@@ -137,9 +137,23 @@ export default function CreateTaskModal({
       }
       onClose();
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail || "Failed to save task.";
+      const errObj = err as {
+        response?: { data?: { detail?: string | Array<{ msg?: string }>; message?: string } | string };
+        message?: string;
+      };
+      let msg = "Failed to save task.";
+      const data = errObj?.response?.data;
+      if (typeof data === "string" && data.trim()) {
+        msg = data;
+      } else if (typeof data?.detail === "string") {
+        msg = data.detail;
+      } else if (Array.isArray(data?.detail)) {
+        msg = data.detail.map((d) => d.msg || JSON.stringify(d)).join(", ");
+      } else if (typeof data?.message === "string") {
+        msg = data.message;
+      } else if (errObj?.message) {
+        msg = errObj.message;
+      }
       setValidationError(msg);
       toast.error(msg);
     } finally {

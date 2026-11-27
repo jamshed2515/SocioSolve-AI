@@ -46,6 +46,8 @@ async def get_current_user(claims: dict = Depends(get_firebase_claims)) -> dict:
     if not is_active(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is deactivated. Contact an administrator.")
     user["_claims"] = claims
+    if "_id" in user and "id" not in user:
+        user["id"] = str(user["_id"])
     return user
 
 

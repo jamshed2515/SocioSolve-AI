@@ -56,6 +56,17 @@ def _parse_object_id(id_str: str, label: str = "ID") -> ObjectId:
     return ObjectId(id_str)
 
 
+def _extract_user_id(current_user: Dict[str, Any]) -> str:
+    """Extract string user ID whether dict has '_id' (MongoDB) or 'id' (test mocks/schemas)."""
+    val = current_user.get("_id") or current_user.get("id")
+    if not val:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication error: user ID missing.",
+        )
+    return str(val)
+
+
 def _is_team_member(team: Dict[str, Any], user_id: str) -> bool:
     """Check if user_id is the leader or in the accepted members list."""
     if not team or not user_id:
@@ -235,7 +246,7 @@ async def create_task(
     Validates team existence, leader identity, assignees team membership, and dates.
     """
     team_oid = _parse_object_id(team_id_str, "team_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
     user_oid = _parse_object_id(user_id, "user_id")
 
     team = await db[TeamCollaborationCollections.TEAMS.value].find_one({"_id": team_oid})
@@ -320,7 +331,7 @@ async def get_team_tasks(
     Supports search, status/priority/assigned filtering, and sorting.
     """
     team_oid = _parse_object_id(team_id_str, "team_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     team = await db[TeamCollaborationCollections.TEAMS.value].find_one({"_id": team_oid})
     if not team:
@@ -400,7 +411,7 @@ async def get_my_assigned_tasks(
     Get all tasks assigned to the current user across all teams.
     Supports status & priority filters, pagination, and due date sorting.
     """
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
     user_oid = _parse_object_id(user_id, "user_id")
 
     query: Dict[str, Any] = {"assigned_to": user_oid}
@@ -450,7 +461,7 @@ async def get_task_details(
     Get single task details. Restricted to team members.
     """
     task_oid = _parse_object_id(task_id_str, "task_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     if not task:
@@ -477,7 +488,7 @@ async def update_task(
     Validates newly assigned members and date range.
     """
     task_oid = _parse_object_id(task_id_str, "task_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     if not task:
@@ -554,7 +565,7 @@ async def update_task_status(
     Synchronizes progress and completed_at consistently.
     """
     task_oid = _parse_object_id(task_id_str, "task_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     if not task:
@@ -651,7 +662,7 @@ async def update_task_progress(
     Synchronizes status and completed_at consistently.
     """
     task_oid = _parse_object_id(task_id_str, "task_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     if not task:
@@ -740,7 +751,7 @@ async def reassign_task(
     Validates members belong to the team and deduplicates user IDs.
     """
     task_oid = _parse_object_id(task_id_str, "task_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     if not task:
@@ -801,7 +812,7 @@ async def delete_task(
     Delete a task (Team Leader or creator only).
     """
     task_oid = _parse_object_id(task_id_str, "task_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     task = await db[TeamCollaborationCollections.TEAM_TASKS.value].find_one({"_id": task_oid})
     if not task:

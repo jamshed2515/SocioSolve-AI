@@ -50,6 +50,17 @@ def _parse_object_id(id_str: str, label: str = "ID") -> ObjectId:
     return ObjectId(id_str)
 
 
+def _extract_user_id(current_user: Dict[str, Any]) -> str:
+    """Extract string user ID whether dict has '_id' (MongoDB) or 'id' (test mocks/schemas)."""
+    val = current_user.get("_id") or current_user.get("id")
+    if not val:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication error: user ID missing.",
+        )
+    return str(val)
+
+
 def _is_team_member(team: Dict[str, Any], user_id: str) -> bool:
     if not team or not user_id:
         return False
@@ -198,7 +209,7 @@ async def create_milestone(
     Validates team existence, leader identity, and linked tasks.
     """
     team_oid = _parse_object_id(team_id_str, "team_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
     user_oid = _parse_object_id(user_id, "user_id")
 
     team = await db[TeamCollaborationCollections.TEAMS.value].find_one({"_id": team_oid})
@@ -251,7 +262,7 @@ async def get_team_milestones(
     List team milestones with status filtering, search, and pagination. Team members only.
     """
     team_oid = _parse_object_id(team_id_str, "team_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     team = await db[TeamCollaborationCollections.TEAMS.value].find_one({"_id": team_oid})
     if not team:
@@ -314,7 +325,7 @@ async def get_milestone_details(
     Get single milestone details. Restricted to team members.
     """
     milestone_oid = _parse_object_id(milestone_id_str, "milestone_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     milestone = await db[TeamCollaborationCollections.TEAM_MILESTONES.value].find_one({"_id": milestone_oid})
     if not milestone:
@@ -340,7 +351,7 @@ async def update_milestone(
     Update milestone details (Team leader only).
     """
     milestone_oid = _parse_object_id(milestone_id_str, "milestone_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     milestone = await db[TeamCollaborationCollections.TEAM_MILESTONES.value].find_one({"_id": milestone_oid})
     if not milestone:
@@ -396,7 +407,7 @@ async def update_milestone_progress(
     Synchronizes status and completion date.
     """
     milestone_oid = _parse_object_id(milestone_id_str, "milestone_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     milestone = await db[TeamCollaborationCollections.TEAM_MILESTONES.value].find_one({"_id": milestone_oid})
     if not milestone:
@@ -478,7 +489,7 @@ async def delete_milestone(
     Delete milestone (Team leader only). Preserves linked tasks.
     """
     milestone_oid = _parse_object_id(milestone_id_str, "milestone_id")
-    user_id = str(current_user["id"])
+    user_id = _extract_user_id(current_user)
 
     milestone = await db[TeamCollaborationCollections.TEAM_MILESTONES.value].find_one({"_id": milestone_oid})
     if not milestone:
