@@ -18,6 +18,17 @@ from app.modules.team_collaboration.models.task_model import (
     new_task_document,
     create_task_indexes,
 )
+from app.modules.team_collaboration.models.meeting_model import (
+    MeetingType,
+    MeetingStatus,
+    new_meeting_document,
+    create_meeting_indexes,
+)
+from app.modules.team_collaboration.models.milestone_model import (
+    MilestoneStatus,
+    new_milestone_document,
+    create_milestone_indexes,
+)
 
 __all__ = [
     "TeamCollaborationCollections",
@@ -34,5 +45,12 @@ __all__ = [
     "TaskStatus",
     "new_task_document",
     "create_task_indexes",
+    "MeetingType",
+    "MeetingStatus",
+    "new_meeting_document",
+    "create_meeting_indexes",
+    "MilestoneStatus",
+    "new_milestone_document",
+    "create_milestone_indexes",
 ]
 

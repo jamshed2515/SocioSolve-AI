@@ -36,10 +36,22 @@ from app.modules.team_collaboration.schemas.task_schema import (
     TaskListResponse,
     TaskResponse,
 )
+from app.modules.team_collaboration.schemas.meeting_schema import (
+    MeetingCreate,
+    MeetingListResponse,
+    MeetingResponse,
+)
+from app.modules.team_collaboration.schemas.milestone_schema import (
+    MilestoneCreate,
+    MilestoneListResponse,
+    MilestoneResponse,
+)
 from app.modules.team_collaboration.services import (
     discussion_service,
     invitation_service,
     join_request_service,
+    meeting_service,
+    milestone_service,
     task_service,
     team_service,
 )
@@ -467,6 +479,111 @@ async def get_team_tasks(
         sort_by=sort_by,
         sort_order=sort_order,
     )
+
+
+# ── Team Meetings (Phase 7 Part A) ──────────────────────────────────────────
+@router.post(
+    "/{team_id}/meetings",
+    response_model=MeetingResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Schedule a team meeting (Leader only)",
+    tags=["Module 3 – Meetings"],
+)
+async def create_team_meeting(
+    team_id: str,
+    payload: MeetingCreate,
+    current_user: dict = Depends(get_current_user),
+) -> MeetingResponse:
+    """Schedule a meeting for the team. Restricted to team leader."""
+    db = get_database()
+    return await meeting_service.create_meeting(
+        db=db,
+        team_id_str=team_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/meetings",
+    response_model=MeetingListResponse,
+    summary="Get meetings for a team",
+    tags=["Module 3 – Meetings"],
+)
+async def get_team_meetings(
+    team_id: str,
+    status: Optional[str] = Query(None, description="Filter by status (scheduled, completed, cancelled)"),
+    timeframe: Optional[str] = Query(None, description="Filter by timeframe ('upcoming' or 'past')"),
+    sort_order: str = Query("asc", description="Sort order: 'asc' or 'desc'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> MeetingListResponse:
+    """List team meetings with status/timeframe filtering and pagination. Team members only."""
+    db = get_database()
+    return await meeting_service.get_team_meetings(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+        status_filter=status,
+        timeframe=timeframe,
+        sort_order=sort_order,
+    )
+
+
+# ── Team Milestones (Phase 7 Part B) ────────────────────────────────────────
+@router.post(
+    "/{team_id}/milestones",
+    response_model=MilestoneResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a team milestone (Leader only)",
+    tags=["Module 3 – Milestones"],
+)
+async def create_team_milestone(
+    team_id: str,
+    payload: MilestoneCreate,
+    current_user: dict = Depends(get_current_user),
+) -> MilestoneResponse:
+    """Create a new project milestone for the team. Restricted to team leader."""
+    db = get_database()
+    return await milestone_service.create_milestone(
+        db=db,
+        team_id_str=team_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{team_id}/milestones",
+    response_model=MilestoneListResponse,
+    summary="Get milestones for a team",
+    tags=["Module 3 – Milestones"],
+)
+async def get_team_milestones(
+    team_id: str,
+    status: Optional[str] = Query(None, description="Filter by status (pending, in_progress, completed, overdue)"),
+    search: Optional[str] = Query(None, description="Search in milestone title"),
+    sort_order: str = Query("asc", description="Sort order: 'asc' or 'desc'"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=50, description="Items per page"),
+    current_user: dict = Depends(get_current_user),
+) -> MilestoneListResponse:
+    """List team milestones with status filtering, search, and pagination. Team members only."""
+    db = get_database()
+    return await milestone_service.get_team_milestones(
+        db=db,
+        team_id_str=team_id,
+        current_user=current_user,
+        page=page,
+        limit=limit,
+        status_filter=status,
+        search=search,
+        sort_order=sort_order,
+    )
+
 
 
 

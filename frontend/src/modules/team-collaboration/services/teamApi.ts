@@ -4,6 +4,8 @@ import type {
   ChallengeOption,
   CommentListResponse,
   CreateJoinRequestPayload,
+  CreateMeetingPayload,
+  CreateMilestonePayload,
   CreateTaskPayload,
   CreateTeamPayload,
   DiscussionComment,
@@ -13,6 +15,8 @@ import type {
   JoinRequest,
   JoinRequestDecisionPayload,
   JoinRequestListResponse,
+  MeetingListResponse,
+  MilestoneListResponse,
   ModuleStatusResponse,
   TaskPriority,
   TaskStatus,
@@ -21,8 +25,12 @@ import type {
   TeamDiscussion,
   TeamInvitation,
   TeamListResponse,
+  TeamMeeting,
   TeamMemberDetail,
+  TeamMilestone,
   TeamTask,
+  UpdateMeetingPayload,
+  UpdateMilestonePayload,
   UpdateTaskPayload,
   UpdateTeamPayload,
   UserSearchCandidate,
@@ -600,6 +608,151 @@ export const teamApi = {
    */
   async deleteTask(taskId: string): Promise<{ message: string; task_id: string }> {
     const response = await api.delete<{ message: string; task_id: string }>(`/tasks/${taskId}`);
+    return response.data;
+  },
+
+  // ── Phase 7: Team Meetings APIs ──────────────────────────────────────────
+
+  /**
+   * Schedule a meeting in a team (Team Leader only).
+   * POST /api/teams/{team_id}/meetings
+   */
+  async createMeeting(teamId: string, payload: CreateMeetingPayload): Promise<TeamMeeting> {
+    const response = await api.post<TeamMeeting>(`/teams/${teamId}/meetings`, payload);
+    return response.data;
+  },
+
+  /**
+   * Get team meetings with status/timeframe filtering and pagination.
+   * GET /api/teams/{team_id}/meetings
+   */
+  async getTeamMeetings(
+    teamId: string,
+    params?: {
+      status?: string;
+      timeframe?: string;
+      sort_order?: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<MeetingListResponse> {
+    const response = await api.get<MeetingListResponse>(`/teams/${teamId}/meetings`, { params });
+    return response.data;
+  },
+
+  /**
+   * Get all meetings where the authenticated user is an attendee or organizer.
+   * GET /api/meetings/my
+   */
+  async getMyMeetings(params?: {
+    status?: string;
+    timeframe?: string;
+    sort_order?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<MeetingListResponse> {
+    const response = await api.get<MeetingListResponse>("/meetings/my", { params });
+    return response.data;
+  },
+
+  /**
+   * Get details and permissions for a single meeting.
+   * GET /api/meetings/{meeting_id}
+   */
+  async getMeetingDetails(meetingId: string): Promise<TeamMeeting> {
+    const response = await api.get<TeamMeeting>(`/meetings/${meetingId}`);
+    return response.data;
+  },
+
+  /**
+   * Update meeting details (Team Leader or organizer).
+   * PUT /api/meetings/{meeting_id}
+   */
+  async updateMeeting(meetingId: string, payload: UpdateMeetingPayload): Promise<TeamMeeting> {
+    const response = await api.put<TeamMeeting>(`/meetings/${meetingId}`, payload);
+    return response.data;
+  },
+
+  /**
+   * Cancel a scheduled meeting (Team Leader or organizer).
+   * PATCH /api/meetings/{meeting_id}/cancel
+   */
+  async cancelMeeting(meetingId: string): Promise<TeamMeeting> {
+    const response = await api.patch<TeamMeeting>(`/meetings/${meetingId}/cancel`);
+    return response.data;
+  },
+
+  /**
+   * Delete a meeting permanently (Team Leader only).
+   * DELETE /api/meetings/{meeting_id}
+   */
+  async deleteMeeting(meetingId: string): Promise<{ message: string; meeting_id: string }> {
+    const response = await api.delete<{ message: string; meeting_id: string }>(`/meetings/${meetingId}`);
+    return response.data;
+  },
+
+  // ── Phase 7: Team Milestones APIs ────────────────────────────────────────
+
+  /**
+   * Create a project milestone (Team Leader only).
+   * POST /api/teams/{team_id}/milestones
+   */
+  async createMilestone(teamId: string, payload: CreateMilestonePayload): Promise<TeamMilestone> {
+    const response = await api.post<TeamMilestone>(`/teams/${teamId}/milestones`, payload);
+    return response.data;
+  },
+
+  /**
+   * Get team milestones with status filtering, search, and pagination.
+   * GET /api/teams/{team_id}/milestones
+   */
+  async getTeamMilestones(
+    teamId: string,
+    params?: {
+      status?: string;
+      search?: string;
+      sort_order?: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<MilestoneListResponse> {
+    const response = await api.get<MilestoneListResponse>(`/teams/${teamId}/milestones`, { params });
+    return response.data;
+  },
+
+  /**
+   * Get single milestone details and linked tasks.
+   * GET /api/milestones/{milestone_id}
+   */
+  async getMilestoneDetails(milestoneId: string): Promise<TeamMilestone> {
+    const response = await api.get<TeamMilestone>(`/milestones/${milestoneId}`);
+    return response.data;
+  },
+
+  /**
+   * Update milestone details (Team Leader only).
+   * PUT /api/milestones/{milestone_id}
+   */
+  async updateMilestone(milestoneId: string, payload: UpdateMilestonePayload): Promise<TeamMilestone> {
+    const response = await api.put<TeamMilestone>(`/milestones/${milestoneId}`, payload);
+    return response.data;
+  },
+
+  /**
+   * Update milestone progress percentage 0-100 (Team Leader only).
+   * PATCH /api/milestones/{milestone_id}/progress
+   */
+  async updateMilestoneProgress(milestoneId: string, progress: number): Promise<TeamMilestone> {
+    const response = await api.patch<TeamMilestone>(`/milestones/${milestoneId}/progress`, { progress });
+    return response.data;
+  },
+
+  /**
+   * Delete a milestone permanently (Team Leader only).
+   * DELETE /api/milestones/{milestone_id}
+   */
+  async deleteMilestone(milestoneId: string): Promise<{ message: string; milestone_id: string }> {
+    const response = await api.delete<{ message: string; milestone_id: string }>(`/milestones/${milestoneId}`);
     return response.data;
   },
 };

@@ -31,6 +31,10 @@ import {
   UserMinus,
   UserPlus,
   Users,
+  Video,
+  MapPin,
+  Target,
+  Link as LinkIcon,
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -42,8 +46,24 @@ import CreateDiscussionModal from "../components/CreateDiscussionModal";
 import DiscussionThreadView from "../components/DiscussionThreadView";
 import CreateTaskModal from "../components/CreateTaskModal";
 import TaskDetailsModal from "../components/TaskDetailsModal";
+import ScheduleMeetingModal from "../components/ScheduleMeetingModal";
+import MeetingDetailsModal from "../components/MeetingDetailsModal";
+import CreateMilestoneModal from "../components/CreateMilestoneModal";
+import MilestoneDetailsModal from "../components/MilestoneDetailsModal";
 import teamApi from "../services/teamApi";
-import type { AuthUser, JoinRequest, TaskPriority, TaskStatus, Team, TeamDiscussion, TeamTask } from "../types";
+import type {
+  AuthUser,
+  JoinRequest,
+  MeetingStatus,
+  MilestoneStatus,
+  TaskPriority,
+  TaskStatus,
+  Team,
+  TeamDiscussion,
+  TeamMeeting,
+  TeamMilestone,
+  TeamTask,
+} from "../types";
 
 type DetailTab = "overview" | "members" | "requests" | "discussions" | "tasks" | "meetings";
 
@@ -93,6 +113,43 @@ const TASK_STATUS_BADGE: Record<string, string> = {
   in_progress: "bg-primary-500/20 text-primary-300 border-primary-500/30",
   review: "bg-purple-500/20 text-purple-300 border-purple-500/30",
   completed: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+};
+
+const MEETING_STATUS_BADGE: Record<string, { label: string; class: string }> = {
+  scheduled: {
+    label: "Scheduled",
+    class: "bg-primary-500/15 text-primary-300 border-primary-500/30",
+  },
+  completed: {
+    label: "Completed",
+    class: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  },
+  cancelled: {
+    label: "Cancelled",
+    class: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  },
+};
+
+const MILESTONE_STATUS_BADGE: Record<
+  MilestoneStatus,
+  { label: string; class: string }
+> = {
+  pending: {
+    label: "Pending",
+    class: "bg-slate-500/15 text-slate-300 border-slate-500/30",
+  },
+  in_progress: {
+    label: "In Progress",
+    class: "bg-primary-500/15 text-primary-300 border-primary-500/30",
+  },
+  completed: {
+    label: "Completed",
+    class: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  },
+  overdue: {
+    label: "Overdue",
+    class: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+  },
 };
 
 export default function TeamDetails() {
@@ -252,6 +309,69 @@ export default function TeamDetails() {
       void fetchTeamTasks();
     }
   }, [activeTab, fetchTeamTasks]);
+
+  // Phase 7: Meetings & Milestones states
+  const [meetingSubView, setMeetingSubView] = useState<"meetings" | "milestones">("meetings");
+  const [meetings, setMeetings] = useState<TeamMeeting[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
+  const [meetingStatusFilter, setMeetingStatusFilter] = useState<string>("all");
+  const [upcomingOnly, setUpcomingOnly] = useState<boolean>(false);
+  const [isScheduleMeetingOpen, setIsScheduleMeetingOpen] = useState(false);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
+  const [editingMeeting, setEditingMeeting] = useState<TeamMeeting | null>(null);
+
+  const [milestones, setMilestones] = useState<TeamMilestone[]>([]);
+  const [loadingMilestones, setLoadingMilestones] = useState(false);
+  const [milestoneStatusFilter, setMilestoneStatusFilter] = useState<string>("all");
+  const [isCreateMilestoneOpen, setIsCreateMilestoneOpen] = useState(false);
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
+  const [editingMilestone, setEditingMilestone] = useState<TeamMilestone | null>(null);
+
+  const fetchTeamMeetings = useCallback(async () => {
+    if (!id) return;
+    setLoadingMeetings(true);
+    try {
+      const res = await teamApi.getTeamMeetings(id, {
+        status: meetingStatusFilter !== "all" ? (meetingStatusFilter as MeetingStatus) : undefined,
+        upcoming_only: upcomingOnly,
+        limit: 50,
+      });
+      setMeetings(res.items || []);
+    } catch {
+      // Non-member or error
+    } finally {
+      setLoadingMeetings(false);
+    }
+  }, [id, meetingStatusFilter, upcomingOnly]);
+
+  const fetchTeamMilestones = useCallback(async () => {
+    if (!id) return;
+    setLoadingMilestones(true);
+    try {
+      const res = await teamApi.getTeamMilestones(id, {
+        status:
+          milestoneStatusFilter !== "all"
+            ? (milestoneStatusFilter as MilestoneStatus)
+            : undefined,
+        limit: 50,
+      });
+      setMilestones(res.items || []);
+    } catch {
+      // Non-member or error
+    } finally {
+      setLoadingMilestones(false);
+    }
+  }, [id, milestoneStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab === "meetings") {
+      if (meetingSubView === "meetings") {
+        void fetchTeamMeetings();
+      } else {
+        void fetchTeamMilestones();
+      }
+    }
+  }, [activeTab, meetingSubView, fetchTeamMeetings, fetchTeamMilestones]);
 
   // Handle Team Deletion
   const handleDeleteConfirm = async () => {
@@ -676,8 +796,8 @@ export default function TeamDetails() {
               : "border-transparent text-white/40 hover:text-white/70"
           }`}
         >
-          <Calendar size={15} /> Meetings{" "}
-          <span className="text-[10px] px-1.5 py-0.2 rounded bg-white/5 text-white/40">Phase 6</span>
+          <Calendar size={15} /> Meetings & Milestones{" "}
+          <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-semibold border border-amber-500/20">Phase 7</span>
         </button>
       </div>
 
@@ -1505,14 +1625,360 @@ export default function TeamDetails() {
         </div>
       )}
 
-      {/* ── TAB 5: MEETINGS (PLACEHOLDER FOR PHASE 6) ────────────────── */}
+      {/* ── TAB 5: MEETINGS & MILESTONES (PHASE 7) ──────────────────── */}
       {activeTab === "meetings" && (
-        <div className="glass p-10 text-center space-y-3 border-dashed border-white/15 rounded-2xl">
-          <Calendar size={32} className="mx-auto text-amber-400" />
-          <h3 className="text-base font-bold text-white">Team Meetings & Milestones</h3>
-          <p className="text-xs text-white/50 max-w-md mx-auto">
-            Meeting scheduling, agendas, and SIH milestone sign-offs will be implemented in Phase 6.
-          </p>
+        <div className="space-y-4">
+          {!isMember && !isLeader ? (
+            <div className="glass p-10 text-center rounded-2xl border border-white/10 space-y-3">
+              <Shield size={32} className="mx-auto text-amber-400" />
+              <h3 className="text-base font-bold text-white">Private Team Syncs & Milestones</h3>
+              <p className="text-xs text-white/50 max-w-md mx-auto">
+                Meeting links, physical sync venues, and delivery milestones are restricted to members of {team.name}.
+              </p>
+              {team.user_request_status !== "pending" && !isFull && (
+                <button
+                  type="button"
+                  onClick={() => setIsJoinModalOpen(true)}
+                  className="btn btn-primary text-xs inline-flex items-center gap-1.5 mt-2"
+                >
+                  <UserPlus size={14} /> Request to Join Team
+                </button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Sub-view toggle & Controls */}
+              <div className="glass p-4 rounded-2xl border border-white/10 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 bg-dark-900/60 p-1 rounded-xl border border-white/10 w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setMeetingSubView("meetings")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        meetingSubView === "meetings"
+                          ? "bg-primary-500 text-white shadow-md shadow-primary-500/20"
+                          : "text-white/60 hover:text-white"
+                      }`}
+                    >
+                      <Calendar size={13} />
+                      <span>Meetings ({meetings.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMeetingSubView("milestones")}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        meetingSubView === "milestones"
+                          ? "bg-amber-500 text-white shadow-md shadow-amber-500/20"
+                          : "text-white/60 hover:text-white"
+                      }`}
+                    >
+                      <Target size={13} />
+                      <span>Milestones ({milestones.length})</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {meetingSubView === "meetings" ? (
+                      isLeader && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMeeting(null);
+                            setIsScheduleMeetingOpen(true);
+                          }}
+                          className="btn-primary text-xs px-3.5 py-1.5 shadow-lg shadow-primary-500/20 flex items-center gap-1.5"
+                        >
+                          <Plus size={14} /> Schedule Sync
+                        </button>
+                      )
+                    ) : (
+                      isLeader && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMilestone(null);
+                            setIsCreateMilestoneOpen(true);
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-600/20 transition flex items-center gap-1.5"
+                        >
+                          <Plus size={14} /> New Milestone
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* Filters */}
+                <div className="pt-2 border-t border-white/5 flex flex-wrap items-center gap-3">
+                  {meetingSubView === "meetings" ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-white/50">Status:</span>
+                        <select
+                          value={meetingStatusFilter}
+                          onChange={(e) => setMeetingStatusFilter(e.target.value)}
+                          className="px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none"
+                        >
+                          <option value="all" className="bg-dark-900">All</option>
+                          <option value="scheduled" className="bg-dark-900">Scheduled</option>
+                          <option value="completed" className="bg-dark-900">Completed</option>
+                          <option value="cancelled" className="bg-dark-900">Cancelled</option>
+                        </select>
+                      </div>
+
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-white/70 hover:text-white">
+                        <input
+                          type="checkbox"
+                          checked={upcomingOnly}
+                          onChange={(e) => setUpcomingOnly(e.target.checked)}
+                          className="rounded border-white/20 bg-white/5 text-primary-500 focus:ring-0"
+                        />
+                        <span>Upcoming only</span>
+                      </label>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/50">Status:</span>
+                      <select
+                        value={milestoneStatusFilter}
+                        onChange={(e) => setMilestoneStatusFilter(e.target.value)}
+                        className="px-2.5 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white focus:outline-none"
+                      >
+                        <option value="all" className="bg-dark-900">All Statuses</option>
+                        <option value="pending" className="bg-dark-900">Pending</option>
+                        <option value="in_progress" className="bg-dark-900">In Progress</option>
+                        <option value="completed" className="bg-dark-900">Completed</option>
+                        <option value="overdue" className="bg-dark-900">Overdue</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sub-view Content: Meetings */}
+              {meetingSubView === "meetings" && (
+                <>
+                  {loadingMeetings ? (
+                    <div className="glass p-12 text-center rounded-2xl space-y-2">
+                      <Loader2 size={24} className="animate-spin mx-auto text-primary-400" />
+                      <p className="text-xs text-white/50">Loading scheduled meetings...</p>
+                    </div>
+                  ) : meetings.length === 0 ? (
+                    <div className="glass p-10 text-center rounded-2xl border-dashed border-white/15 space-y-3">
+                      <Calendar size={28} className="mx-auto text-white/20" />
+                      <h4 className="text-sm font-bold text-white">No Meetings Found</h4>
+                      <p className="text-xs text-white/50 max-w-sm mx-auto">
+                        No team meetings currently match the selected criteria.
+                      </p>
+                      {isLeader && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMeeting(null);
+                            setIsScheduleMeetingOpen(true);
+                          }}
+                          className="btn-primary text-xs px-3.5 py-1.5 inline-flex items-center gap-1.5"
+                        >
+                          <Plus size={13} /> Schedule Sync
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {meetings.map((m) => {
+                        const statusStyle =
+                          MEETING_STATUS_BADGE[m.status] || MEETING_STATUS_BADGE.scheduled;
+
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={() => setSelectedMeetingId(m.id)}
+                            className="glass p-5 rounded-2xl hover:border-primary-500/40 transition cursor-pointer group flex flex-col justify-between space-y-3"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`badge text-[10px] font-semibold border ${statusStyle.class}`}
+                                  >
+                                    {statusStyle.label}
+                                  </span>
+                                  {m.is_upcoming && m.status === "scheduled" && (
+                                    <span className="badge text-[10px] bg-primary-500/10 text-primary-300 border-primary-500/20 font-bold flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-pulse" />
+                                      Upcoming
+                                    </span>
+                                  )}
+                                </div>
+
+                                <span className="text-[10px] text-white/50 flex items-center gap-1">
+                                  {m.meeting_type === "online" ? (
+                                    <>
+                                      <Video size={12} className="text-primary-400" /> Online
+                                    </>
+                                  ) : (
+                                    <>
+                                      <MapPin size={12} className="text-amber-400" /> Physical
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+
+                              <h4 className="text-sm font-bold text-white group-hover:text-primary-300 transition line-clamp-1">
+                                {m.title}
+                              </h4>
+                              {m.description && (
+                                <p className="text-xs text-white/60 line-clamp-2 leading-relaxed">
+                                  {m.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="space-y-2 pt-2 border-t border-white/5 text-xs text-white/70">
+                              <div className="flex items-center gap-2">
+                                <Clock size={12} className="text-primary-400 shrink-0" />
+                                <span className="truncate">
+                                  {new Date(m.meeting_date).toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}{" "}
+                                  • {m.start_time} - {m.end_time}
+                                </span>
+                              </div>
+
+                              {m.meeting_type === "online" && m.meeting_link && (
+                                <div className="flex items-center gap-1 text-[11px] text-primary-400 truncate">
+                                  <LinkIcon size={11} className="shrink-0" />
+                                  <span className="truncate">{m.meeting_link}</span>
+                                </div>
+                              )}
+
+                              {m.meeting_type === "offline" && m.location && (
+                                <div className="flex items-center gap-1 text-[11px] text-amber-300/80 truncate">
+                                  <MapPin size={11} className="shrink-0" />
+                                  <span className="truncate">{m.location}</span>
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-between pt-1 text-[10px] text-white/40">
+                                <span>By {m.organizer_name || "Organizer"}</span>
+                                <span>{m.attendees?.length || 0} attendees</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Sub-view Content: Milestones */}
+              {meetingSubView === "milestones" && (
+                <>
+                  {loadingMilestones ? (
+                    <div className="glass p-12 text-center rounded-2xl space-y-2">
+                      <Loader2 size={24} className="animate-spin mx-auto text-amber-400" />
+                      <p className="text-xs text-white/50">Loading milestones...</p>
+                    </div>
+                  ) : milestones.length === 0 ? (
+                    <div className="glass p-10 text-center rounded-2xl border-dashed border-white/15 space-y-3">
+                      <Target size={28} className="mx-auto text-white/20" />
+                      <h4 className="text-sm font-bold text-white">No Milestones Established</h4>
+                      <p className="text-xs text-white/50 max-w-sm mx-auto">
+                        Establish milestones with target dates and linked tasks to monitor execution progress.
+                      </p>
+                      {isLeader && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingMilestone(null);
+                            setIsCreateMilestoneOpen(true);
+                          }}
+                          className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-white bg-amber-600 hover:bg-amber-500 transition inline-flex items-center gap-1.5"
+                        >
+                          <Plus size={13} /> New Milestone
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {milestones.map((ms) => {
+                        const statusStyle =
+                          MILESTONE_STATUS_BADGE[ms.status] || MILESTONE_STATUS_BADGE.pending;
+
+                        return (
+                          <div
+                            key={ms.id}
+                            onClick={() => setSelectedMilestoneId(ms.id)}
+                            className="glass p-5 rounded-2xl hover:border-amber-500/40 transition cursor-pointer group flex flex-col justify-between space-y-3"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className={`badge text-[10px] font-semibold border ${statusStyle.class}`}
+                                >
+                                  {statusStyle.label}
+                                </span>
+                                {ms.is_overdue && ms.status !== "completed" && (
+                                  <span className="badge text-[10px] bg-rose-500/10 text-rose-300 border-rose-500/20 font-bold flex items-center gap-1 animate-pulse">
+                                    <AlertTriangle size={10} /> Overdue
+                                  </span>
+                                )}
+                              </div>
+
+                              <h4 className="text-sm font-bold text-white group-hover:text-amber-300 transition line-clamp-1">
+                                {ms.title}
+                              </h4>
+                              {ms.description && (
+                                <p className="text-xs text-white/60 line-clamp-2 leading-relaxed">
+                                  {ms.description}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="space-y-2 pt-2 border-t border-white/5">
+                              <div>
+                                <div className="flex items-center justify-between text-[11px] mb-1">
+                                  <span className="text-white/40">Progress</span>
+                                  <span className="font-mono font-semibold text-white">{ms.progress}%</span>
+                                </div>
+                                <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all duration-300 ${
+                                      ms.progress === 100
+                                        ? "bg-emerald-500"
+                                        : ms.is_overdue
+                                        ? "bg-rose-500"
+                                        : "bg-amber-500"
+                                    }`}
+                                    style={{ width: `${ms.progress}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1 text-[10px] text-white/40">
+                                <div className="flex items-center gap-1">
+                                  <Calendar size={11} className="text-amber-400" />
+                                  <span>
+                                    {new Date(ms.due_date).toLocaleDateString(undefined, {
+                                      month: "short",
+                                      day: "numeric",
+                                    })}
+                                  </span>
+                                </div>
+                                <span>{ms.linked_task_ids?.length || 0} tasks linked</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -1836,6 +2302,77 @@ export default function TeamDetails() {
           onEditTask={(t) => {
             setEditingTask(t);
             setIsCreateTaskOpen(true);
+          }}
+        />
+      )}
+
+      {/* ── Phase 7: Schedule/Edit Meeting Modal ──────────────────────── */}
+      {team && (
+        <ScheduleMeetingModal
+          isOpen={isScheduleMeetingOpen}
+          teamId={team.id}
+          teamName={team.name}
+          members={teamMemberOptions}
+          initialMeeting={editingMeeting}
+          onClose={() => {
+            setIsScheduleMeetingOpen(false);
+            setEditingMeeting(null);
+          }}
+          onSuccess={() => void fetchTeamMeetings()}
+        />
+      )}
+
+      {/* ── Phase 7: Meeting Details Modal ────────────────────────────── */}
+      {selectedMeetingId && (
+        <MeetingDetailsModal
+          meetingId={selectedMeetingId}
+          onClose={() => setSelectedMeetingId(null)}
+          onMeetingUpdated={() => void fetchTeamMeetings()}
+          onMeetingCancelled={() => void fetchTeamMeetings()}
+          onMeetingDeleted={() => {
+            setSelectedMeetingId(null);
+            void fetchTeamMeetings();
+          }}
+          onEditMeeting={(m) => {
+            setSelectedMeetingId(null);
+            setEditingMeeting(m);
+            setIsScheduleMeetingOpen(true);
+          }}
+        />
+      )}
+
+      {/* ── Phase 7: Create/Edit Milestone Modal ──────────────────────── */}
+      {team && (
+        <CreateMilestoneModal
+          isOpen={isCreateMilestoneOpen}
+          teamId={team.id}
+          teamName={team.name}
+          initialMilestone={editingMilestone}
+          onClose={() => {
+            setIsCreateMilestoneOpen(false);
+            setEditingMilestone(null);
+          }}
+          onSuccess={() => void fetchTeamMilestones()}
+        />
+      )}
+
+      {/* ── Phase 7: Milestone Details Modal ─────────────────────────── */}
+      {selectedMilestoneId && (
+        <MilestoneDetailsModal
+          milestoneId={selectedMilestoneId}
+          onClose={() => setSelectedMilestoneId(null)}
+          onMilestoneUpdated={() => void fetchTeamMilestones()}
+          onMilestoneDeleted={() => {
+            setSelectedMilestoneId(null);
+            void fetchTeamMilestones();
+          }}
+          onEditMilestone={(ms) => {
+            setSelectedMilestoneId(null);
+            setEditingMilestone(ms);
+            setIsCreateMilestoneOpen(true);
+          }}
+          onOpenTask={(taskId) => {
+            setSelectedTaskId(taskId);
           }}
         />
       )}

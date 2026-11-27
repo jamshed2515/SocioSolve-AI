@@ -383,3 +383,150 @@ export interface UpdateTaskPayload {
   due_date?: string | null;
 }
 
+// ── Phase 7: Team Meetings & Milestones ───────────────────────────────────────
+
+export type MeetingType = "online" | "offline";
+export type MeetingStatus = "scheduled" | "completed" | "cancelled";
+
+export interface AttendeeInfo {
+  id: string;
+  name: string;
+  email?: string | null;
+  avatar?: string | null;
+  role?: string | null;
+}
+
+export interface MeetingPermissions {
+  can_edit: boolean;
+  can_cancel: boolean;
+  can_delete: boolean;
+  is_organizer: boolean;
+  is_leader: boolean;
+  is_attendee: boolean;
+}
+
+export interface TeamMeeting {
+  id: string;
+  team_id: string;
+  team_name?: string | null;
+  title: string;
+  description: string;
+  scheduled_by: string;
+  organizer_name?: string | null;
+  organizer_email?: string | null;
+  attendees: string[];
+  attendee_details: AttendeeInfo[];
+  meeting_date: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  meeting_type: MeetingType;
+  meeting_link?: string | null;
+  location?: string | null;
+  agenda?: string | null;
+  status: MeetingStatus;
+  created_at: string;
+  updated_at: string;
+  is_upcoming: boolean;
+  permissions?: MeetingPermissions;
+}
+
+export interface MeetingListResponse {
+  items: TeamMeeting[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface CreateMeetingPayload {
+  title: string;
+  description?: string;
+  attendees?: string[];
+  meeting_date: string;
+  start_time: string;
+  end_time: string;
+  timezone?: string;
+  meeting_type: MeetingType;
+  meeting_link?: string | null;
+  location?: string | null;
+  agenda?: string | null;
+}
+
+export interface UpdateMeetingPayload {
+  title?: string;
+  description?: string;
+  attendees?: string[];
+  meeting_date?: string;
+  start_time?: string;
+  end_time?: string;
+  timezone?: string;
+  meeting_type?: MeetingType;
+  meeting_link?: string | null;
+  location?: string | null;
+  agenda?: string | null;
+  status?: MeetingStatus;
+}
+
+export type MilestoneStatus = "pending" | "in_progress" | "completed" | "overdue";
+
+export interface LinkedTaskInfo {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  progress: number;
+}
+
+export interface MilestonePermissions {
+  can_edit: boolean;
+  can_update_progress: boolean;
+  can_delete: boolean;
+  is_leader: boolean;
+  is_creator: boolean;
+}
+
+export interface TeamMilestone {
+  id: string;
+  team_id: string;
+  team_name?: string | null;
+  title: string;
+  description: string;
+  created_by: string;
+  creator_name?: string | null;
+  due_date: string;
+  status: MilestoneStatus;
+  progress: number;
+  linked_task_ids: string[];
+  linked_tasks: LinkedTaskInfo[];
+  created_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+  is_overdue: boolean;
+  permissions?: MilestonePermissions;
+}
+
+export interface MilestoneListResponse {
+  items: TeamMilestone[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface CreateMilestonePayload {
+  title: string;
+  description?: string;
+  due_date: string;
+  linked_task_ids?: string[];
+}
+
+export interface UpdateMilestonePayload {
+  title?: string;
+  description?: string;
+  due_date?: string;
+  linked_task_ids?: string[];
+  status?: MilestoneStatus;
+}
+
+
