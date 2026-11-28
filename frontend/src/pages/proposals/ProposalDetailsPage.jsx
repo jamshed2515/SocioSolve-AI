@@ -8,11 +8,7 @@ import {
   Trash2,
   RotateCcw,
   ExternalLink,
-<<<<<<< Updated upstream
   GitBranch,
-=======
-  Link2,
->>>>>>> Stashed changes
   Globe,
   FileText,
   Users,
@@ -32,8 +28,6 @@ import {
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import ProposalStatusBadge, { ProposalWorkflowStepper } from "../../components/proposals/ProposalStatusBadge";
 import proposalService from "../../services/proposalService";
-
-const BACKEND_ORIGIN = (import.meta.env.VITE_API_URL || "http://localhost:8000/api").replace(/\/api\/?$/, "");
 
 export default function ProposalDetailsPage() {
   const { id } = useParams();
@@ -106,6 +100,27 @@ export default function ProposalDetailsPage() {
     }
   };
 
+  const handleReopenDraft = async () => {
+    try {
+      setProcessing(true);
+      await proposalService.reopenProposal(id, "Reopened withdrawn proposal as draft for revision.");
+      toast.success("Proposal reopened as draft! You can now edit and resubmit it.");
+      loadProposal();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to reopen proposal.");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleOpenDocument = async (doc) => {
+    try {
+      await proposalService.openProtectedDocument(doc.url, doc.name);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Unable to open supporting document.");
+    }
+  };
+
   const handleStatusTransition = async () => {
     if (!decisionModal) return;
     if ((decisionModal === "accepted" || decisionModal === "rejected") && decisionComment.trim().length < 5) {
@@ -146,12 +161,6 @@ export default function ProposalDetailsPage() {
   const summary = proposal.reviewSummary || {};
   const reviews = proposal.reviews || [];
   const history = proposal.statusHistory || [];
-
-  const resolveDocUrl = (url) => {
-    if (!url) return "#";
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    return `${BACKEND_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}`;
-  };
 
   const tabs = [
     { key: "overview", label: "Solution Overview", icon: Layers },
@@ -220,6 +229,16 @@ export default function ProposalDetailsPage() {
                 <RotateCcw size={14} /> Withdraw Proposal
               </button>
             )}
+            {perms.canReopen && (
+              <button
+                type="button"
+                disabled={processing}
+                onClick={handleReopenDraft}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-300 bg-primary-500/15 hover:bg-primary-500/25 border border-primary-500/30 px-3.5 py-2 rounded-xl transition"
+              >
+                <RotateCcw size={14} /> Reopen as Draft
+              </button>
+            )}
             {perms.canReview && (
               <Link
                 to={`/proposals/review-queue?proposalId=${proposal.id}`}
@@ -244,21 +263,33 @@ export default function ProposalDetailsPage() {
               <>
                 <button
                   type="button"
+                  disabled={(summary.reviewCount || 0) < 1}
+                  title={
+                    (summary.reviewCount || 0) < 1
+                      ? "At least one official submitted review is required before accepting"
+                      : "Accept this proposal"
+                  }
                   onClick={() => {
                     setDecisionModal("accepted");
                     setDecisionComment(summary.latestFeedback || "");
                   }}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 px-3.5 py-2 rounded-xl transition"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 px-3.5 py-2 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <CheckCircle2 size={14} /> Accept Proposal
                 </button>
                 <button
                   type="button"
+                  disabled={(summary.reviewCount || 0) < 1}
+                  title={
+                    (summary.reviewCount || 0) < 1
+                      ? "At least one official submitted review is required before rejecting"
+                      : "Reject this proposal"
+                  }
                   onClick={() => {
                     setDecisionModal("rejected");
                     setDecisionComment(summary.latestFeedback || "");
                   }}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 px-3.5 py-2 rounded-xl transition"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-300 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 px-3.5 py-2 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <XCircle size={14} /> Reject Proposal
                 </button>
@@ -582,11 +613,7 @@ export default function ProposalDetailsPage() {
                     className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-<<<<<<< Updated upstream
                       <GitBranch size={18} className="text-white shrink-0" />
-=======
-                      <Link2 size={18} className="text-white shrink-0" />
->>>>>>> Stashed changes
                       <div className="truncate">
                         <p className="text-xs font-semibold text-white">GitHub Source Repository</p>
                         <p className="text-xs text-primary-300 truncate">{proposal.githubUrl}</p>
@@ -636,12 +663,11 @@ export default function ProposalDetailsPage() {
               ) : (
                 <div className="space-y-3">
                   {proposal.supportingDocuments.map((doc, idx) => (
-                    <a
+                    <button
                       key={idx}
-                      href={resolveDocUrl(doc.url)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition"
+                      type="button"
+                      onClick={() => handleOpenDocument(doc)}
+                      className="w-full text-left flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <FileText size={18} className="text-primary-400 shrink-0" />
@@ -654,7 +680,7 @@ export default function ProposalDetailsPage() {
                         </div>
                       </div>
                       <ExternalLink size={15} className="text-primary-400 shrink-0" />
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}
@@ -718,7 +744,7 @@ export default function ProposalDetailsPage() {
                           Recommendation: {rev.recommendation}
                         </span>
                         <div className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-sm">
-                          {rev.totalScore} / {rev.maxTotalScore || 100} ({rev.percentageScore || ((rev.totalScore / (rev.maxTotalScore || 100)) * 100).toFixed(0)}%)
+                          {rev.totalScore} / {rev.maxTotalScore || 50} ({rev.percentageScore || ((rev.totalScore / (rev.maxTotalScore || 50)) * 100).toFixed(0)}%)
                         </div>
                       </div>
                     </div>
@@ -734,13 +760,13 @@ export default function ProposalDetailsPage() {
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <span className="text-xs font-semibold text-white">{crit.label}</span>
                               <span className="text-xs font-bold text-primary-300">
-                                {crit.score}/{crit.maxScore || 20}
+                                {crit.score}/{crit.maxScore || 10}
                               </span>
                             </div>
                             <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden mb-2">
                               <div
                                 className="h-full bg-primary-500 rounded-full"
-                                style={{ width: `${((crit.score || 0) / (crit.maxScore || 20)) * 100}%` }}
+                                style={{ width: `${((crit.score || 0) / (crit.maxScore || 10)) * 100}%` }}
                               />
                             </div>
                           </div>
@@ -784,7 +810,7 @@ export default function ProposalDetailsPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-amber-300">
-                              Score: {entry.totalScore} / {entry.maxTotalScore || 100} ({entry.percentageScore}%)
+                              Score: {entry.totalScore} / {entry.maxTotalScore || 50} ({entry.percentageScore}%)
                             </span>
                             <span className="badge bg-white/10 text-white/70 uppercase text-[10px]">
                               {entry.recommendation}

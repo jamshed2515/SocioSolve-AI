@@ -1,0 +1,302 @@
+{
+  "info": {
+    "_postman_id": "sociosolve-module4-proposals-v2",
+    "name": "SocioSolve-AI — Module 4 (Solution Proposals & Evaluation)",
+    "description": "Complete Postman collection for Module 4 backend APIs including RBAC, rubric evaluation (1-10 scale), protected documents, notifications, and live dashboard stats.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "studentToken", "value": "<FIREBASE_STUDENT_ID_TOKEN>" },
+    { "key": "reviewerToken", "value": "<FIREBASE_REVIEWER_ID_TOKEN>" },
+    { "key": "challengeId", "value": "" },
+    { "key": "proposalId", "value": "" },
+    { "key": "docId", "value": "" },
+    { "key": "notificationId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Metadata & Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Stats (All)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/dashboard-stats?scope=all"
+          }
+        },
+        {
+          "name": "Get Rubric Criteria (1-10 scale)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/rubric-criteria"
+          }
+        },
+        {
+          "name": "Get Published Challenges (Module 2)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/challenges/published"
+          }
+        },
+        {
+          "name": "Get My Teams (Module 3)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/teams/my-teams"
+          }
+        },
+        {
+          "name": "Get Live Student Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/dashboard/student"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Proposals CRUD & Lifecycle",
+      "item": [
+        {
+          "name": "Create Draft Proposal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"HydroSense AI Water Quality Monitor\",\n  \"challengeId\": \"{{challengeId}}\",\n  \"problemUnderstanding\": \"Rural groundwater contamination lacks continuous real-time detection and alerting.\",\n  \"proposedSolution\": \"Solar-powered IoT edge sensor nodes with TinyML anomaly detection and panchayat SMS alerts.\",\n  \"innovationUniqueness\": \"Low-cost self-calibrating sensor array under Rs 3500 per node.\",\n  \"technicalApproach\": \"ESP32-S3, LoRaWAN gateway, FastAPI backend, MongoDB telemetry store, React dashboard.\",\n  \"implementationPlan\": \"Phase 1: Lab calibration (4 weeks). Phase 2: 10-village pilot (6 weeks).\",\n  \"requiredResources\": \"Water testing lab, 15 sensor kits, embedded mentor.\",\n  \"expectedImpact\": \"Safe drinking water alerts for 50,000+ rural residents.\",\n  \"estimatedTimeline\": \"12 Weeks\",\n  \"prototypeUrl\": \"https://figma.com/file/hydrosense\",\n  \"githubUrl\": \"https://github.com/sociosolve/hydrosense\",\n  \"submitImmediately\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/proposals"
+          }
+        },
+        {
+          "name": "List Proposals (Search, Filter, Sort, Paginate)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals?search=HydroSense&status=all&sortBy=newest&page=1&limit=10"
+          }
+        },
+        {
+          "name": "List My Proposals",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/my?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Get Proposal Details",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}"
+          }
+        },
+        {
+          "name": "Update Draft Proposal",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estimatedTimeline\": \"14 Weeks\",\n  \"additionalNotes\": \"Updated field pilot plan.\"\n}"
+            },
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}"
+          }
+        },
+        {
+          "name": "Submit Draft Proposal",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/submit"
+          }
+        },
+        {
+          "name": "Withdraw Submitted Proposal",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Revising hardware BOM before evaluation.\"\n}" },
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/withdraw"
+          }
+        },
+        {
+          "name": "Reopen Withdrawn Proposal to Draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{studentToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Reopening to apply mentor edits.\"\n}" },
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/reopen"
+          }
+        },
+        {
+          "name": "Delete Draft Proposal",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Supporting Documents (Protected)",
+      "item": [
+        {
+          "name": "Upload Supporting Document",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "docType", "value": "implementation_plan", "type": "text" }
+              ]
+            },
+            "url": "{{baseUrl}}/api/proposals/upload-document"
+          }
+        },
+        {
+          "name": "Download Protected Document",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/documents/{{docId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Review & Evaluation Workflow",
+      "item": [
+        {
+          "name": "Get Review Queue (Reviewer/Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{reviewerToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/review-queue?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Save Review Draft (No Status Change)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{reviewerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"criteriaScores\": [\n    { \"key\": \"innovation\", \"score\": 8, \"comment\": \"Original approach\" },\n    { \"key\": \"feasibility\", \"score\": 8, \"comment\": \"Realistic pilot\" },\n    { \"key\": \"technical_quality\", \"score\": 9, \"comment\": \"Solid architecture\" },\n    { \"key\": \"societal_impact\", \"score\": 9, \"comment\": \"High rural impact\" },\n    { \"key\": \"scalability\", \"score\": 8, \"comment\": \"Low unit cost\" }\n  ],\n  \"overallFeedback\": \"Initial draft notes while verifying sensor specs.\",\n  \"recommendation\": \"accept\",\n  \"submitFinal\": false\n}"
+            },
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/reviews"
+          }
+        },
+        {
+          "name": "Submit Official Final Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{reviewerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"criteriaScores\": [\n    { \"key\": \"innovation\", \"score\": 9, \"comment\": \"Strong novelty\" },\n    { \"key\": \"feasibility\", \"score\": 8, \"comment\": \"Practical deployment\" },\n    { \"key\": \"technical_quality\", \"score\": 9, \"comment\": \"Robust stack\" },\n    { \"key\": \"societal_impact\", \"score\": 10, \"comment\": \"Major community impact\" },\n    { \"key\": \"scalability\", \"score\": 8, \"comment\": \"Sustainable model\" }\n  ],\n  \"overallFeedback\": \"Recommended for pilot incubation and seed grant.\",\n  \"recommendation\": \"accept\",\n  \"submitFinal\": true\n}"
+            },
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/reviews"
+          }
+        },
+        {
+          "name": "Accept / Reject Proposal (Requires >= 1 Submitted Review)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{reviewerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"toStatus\": \"accepted\",\n  \"comment\": \"Approved by committee after rubric evaluation (44/50).\"\n}"
+            },
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/status"
+          }
+        },
+        {
+          "name": "Get Proposal Reviews",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/reviews"
+          }
+        },
+        {
+          "name": "Get Review Audit History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/review-history"
+          }
+        },
+        {
+          "name": "Get Status History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/{{proposalId}}/status-history"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Notifications",
+      "item": [
+        {
+          "name": "Get Notifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/notifications"
+          }
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/notifications/{{notificationId}}/read"
+          }
+        },
+        {
+          "name": "Mark All Notifications Read",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{studentToken}}" }],
+            "url": "{{baseUrl}}/api/proposals/notifications/read-all"
+          }
+        }
+      ]
+    }
+  ]
+}

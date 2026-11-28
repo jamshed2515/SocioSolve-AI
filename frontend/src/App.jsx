@@ -99,16 +99,28 @@ export default function App() {
             <ProtectedRoute><MyProposals /></ProtectedRoute>
           } />
           <Route path="/proposals/new" element={
-            <ProtectedRoute><ProposalFormPage /></ProtectedRoute>
+            <ProtectedRoute>
+              <RoleRoute roles={["student", "citizen", "university", "admin"]}>
+                <ProposalFormPage />
+              </RoleRoute>
+            </ProtectedRoute>
           } />
           <Route path="/proposals/review-queue" element={
-            <ProtectedRoute><ReviewQueuePage /></ProtectedRoute>
+            <ProtectedRoute>
+              <RoleRoute roles={["university", "industry", "admin"]}>
+                <ReviewQueuePage />
+              </RoleRoute>
+            </ProtectedRoute>
           } />
           <Route path="/proposals/:id" element={
             <ProtectedRoute><ProposalDetailsPage /></ProtectedRoute>
           } />
           <Route path="/proposals/:id/edit" element={
-            <ProtectedRoute><ProposalFormPage /></ProtectedRoute>
+            <ProtectedRoute>
+              <RoleRoute roles={["student", "citizen", "university", "admin"]}>
+                <ProposalFormPage />
+              </RoleRoute>
+            </ProtectedRoute>
           } />
 
           {/* ── Role-specific Dashboards ───────────────────── */}

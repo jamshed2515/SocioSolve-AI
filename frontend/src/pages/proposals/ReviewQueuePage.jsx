@@ -23,36 +23,41 @@ import ProposalStatusBadge from "../../components/proposals/ProposalStatusBadge"
 import proposalService from "../../services/proposalService";
 import { useAuth } from "../../context/AuthContext";
 
-const DEFAULT_CRITERIA = [
+const FALLBACK_CRITERIA = [
   {
     key: "innovation",
     label: "Innovation and Originality",
     description: "Uniqueness of the proposed approach and creative use of technology or methodology.",
-    maxScore: 20,
+    minScore: 1,
+    maxScore: 10,
   },
   {
     key: "feasibility",
-    label: "Technical Feasibility",
-    description: "Practicality of the implementation plan, engineering soundness, and resource requirements.",
-    maxScore: 20,
+    label: "Feasibility",
+    description: "Practicality of the implementation plan, timeline realism, and resource requirements.",
+    minScore: 1,
+    maxScore: 10,
+  },
+  {
+    key: "technical_quality",
+    label: "Technical Quality",
+    description: "Engineering soundness, system architecture, security, and prototype readiness.",
+    minScore: 1,
+    maxScore: 10,
   },
   {
     key: "societal_impact",
     label: "Societal Impact",
     description: "Measurable benefit to target communities, civic value, and alignment with the challenge.",
-    maxScore: 20,
-  },
-  {
-    key: "implementation_strategy",
-    label: "Implementation Strategy",
-    description: "Milestones, deployment roadmap, prototype readiness, and risk management.",
-    maxScore: 20,
+    minScore: 1,
+    maxScore: 10,
   },
   {
     key: "scalability",
-    label: "Scalability and Sustainability",
+    label: "Sustainability and Scalability",
     description: "Long-term viability, maintainability, financial model, and multi-region scalability.",
-    maxScore: 20,
+    minScore: 1,
+    maxScore: 10,
   },
 ];
 
@@ -61,6 +66,7 @@ export default function ReviewQueuePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const preselectedProposalId = searchParams.get("proposalId");
 
+  const [rubricCriteria, setRubricCriteria] = useState(FALLBACK_CRITERIA);
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -76,6 +82,22 @@ export default function ReviewQueuePage() {
   const [savingReview, setSavingReview] = useState(false);
   const [finalizingDecision, setFinalizingDecision] = useState(false);
 
+  // Fetch backend-authoritative evaluation rubric criteria (1-10 scale)
+  useEffect(() => {
+    let active = true;
+    proposalService
+      .getRubricCriteria()
+      .then((res) => {
+        if (active && Array.isArray(res?.criteria) && res.criteria.length > 0) {
+          setRubricCriteria(res.criteria);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const initializeRubricFromProposal = useCallback(
     (proposalDetail) => {
       const existingMyReview = (proposalDetail.reviews || []).find(
@@ -84,19 +106,22 @@ export default function ReviewQueuePage() {
 
       if (existingMyReview && existingMyReview.criteriaScores?.length > 0) {
         setCriteriaScores(
-          DEFAULT_CRITERIA.map((base) => {
+          rubricCriteria.map((base) => {
             const found = existingMyReview.criteriaScores.find((c) => c.key === base.key);
-            let s = 16;
+            const minS = base.minScore || 1;
+            const maxS = base.maxScore || 10;
+            let s = 8;
             if (found) {
               const raw = Number(found.score);
-              s = found.maxScore === 10 ? raw * 2 : raw;
+              s = found.maxScore && found.maxScore > maxS ? Math.round((raw / found.maxScore) * maxS) : raw;
             }
             return {
               key: base.key,
               label: base.label,
               description: base.description,
-              maxScore: base.maxScore,
-              score: Math.min(20, Math.max(0, s)),
+              minScore: minS,
+              maxScore: maxS,
+              score: Math.min(maxS, Math.max(minS, s)),
               comment: found?.comment || "",
             };
           })
@@ -105,9 +130,11 @@ export default function ReviewQueuePage() {
         setRecommendation(existingMyReview.recommendation || "accept");
       } else {
         setCriteriaScores(
-          DEFAULT_CRITERIA.map((base) => ({
+          rubricCriteria.map((base) => ({
             ...base,
-            score: 16,
+            minScore: base.minScore || 1,
+            maxScore: base.maxScore || 10,
+            score: 8,
             comment: "",
           }))
         );
@@ -115,7 +142,7 @@ export default function ReviewQueuePage() {
         setRecommendation("accept");
       }
     },
-    [user?.id]
+    [user?.id, rubricCriteria]
   );
 
   const openProposalForEvaluation = useCallback(
@@ -160,13 +187,13 @@ export default function ReviewQueuePage() {
     fetchReviewQueue();
   }, [fetchReviewQueue]);
 
-  // Auto-calculated Total Score & Average Score
+  // Auto-calculated Total Score & Average Score (1-10 per criterion, max 50)
   const calculatedMetrics = useMemo(() => {
     if (!criteriaScores.length) {
-      return { totalScore: 0, maxTotal: 100, averageScore: 0, percentage: 0 };
+      return { totalScore: 0, maxTotal: 50, averageScore: 0, percentage: 0 };
     }
     const total = criteriaScores.reduce((acc, c) => acc + Number(c.score || 0), 0);
-    const maxTotal = criteriaScores.reduce((acc, c) => acc + Number(c.maxScore || 20), 0);
+    const maxTotal = criteriaScores.reduce((acc, c) => acc + Number(c.maxScore || 10), 0);
     const avg = Number((total / criteriaScores.length).toFixed(2));
     const pct = Number(((total / maxTotal) * 100).toFixed(1));
     return { totalScore: total, maxTotal, averageScore: avg, percentage: pct };
@@ -198,7 +225,6 @@ export default function ReviewQueuePage() {
           key: c.key,
           label: c.label,
           score: Number(c.score),
-          maxScore: Number(c.maxScore || 20),
           comment: c.comment || "",
         })),
         overallFeedback: overallFeedback.trim(),
@@ -230,7 +256,7 @@ export default function ReviewQueuePage() {
         ? overallFeedback.trim()
         : window.prompt(
             `Enter official decision feedback for marking this proposal as ${targetDecisionStatus.toUpperCase()}:`,
-            `Evaluated via rubric (${calculatedMetrics.totalScore}/100).`
+            `Evaluated via rubric (${calculatedMetrics.totalScore}/${calculatedMetrics.maxTotal}).`
           );
 
     if (!reason || reason.trim().length < 5) {
@@ -477,15 +503,20 @@ export default function ReviewQueuePage() {
                         </a>
                       )}
                       {(activeProposal.supportingDocuments || []).map((doc, idx) => (
-                        <a
+                        <button
                           key={idx}
-                          href={doc.url}
-                          target="_blank"
-                          rel="noreferrer"
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await proposalService.openProtectedDocument(doc.url, doc.name);
+                            } catch (err) {
+                              toast.error(err.response?.data?.detail || "Unable to open document.");
+                            }
+                          }}
                           className="btn-ghost text-xs px-3 py-1.5"
                         >
                           <FileText size={12} /> {doc.name}
-                        </a>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -501,7 +532,7 @@ export default function ReviewQueuePage() {
                       Grading Rubric
                     </h3>
                     <p className="text-xs text-white/50">
-                      Score 5 criteria from 0 to 20 points (Total maximum score: 100).
+                      Score 5 criteria from 1 to 10 points (Total maximum score: 50).
                     </p>
                   </div>
                   <div className="text-right">
@@ -509,7 +540,7 @@ export default function ReviewQueuePage() {
                       {calculatedMetrics.totalScore} / {calculatedMetrics.maxTotal}
                     </span>
                     <span className="block text-[11px] text-accent-400 font-semibold">
-                      {calculatedMetrics.percentage}% · Avg {calculatedMetrics.averageScore} / 20
+                      {calculatedMetrics.percentage}% · Avg {calculatedMetrics.averageScore} / 10
                     </span>
                   </div>
                 </div>
@@ -534,17 +565,17 @@ export default function ReviewQueuePage() {
                           </div>
                         </div>
                         <span className="px-2.5 py-1 rounded-lg bg-primary-500/20 text-primary-300 font-bold text-xs shrink-0">
-                          {crit.score} / {crit.maxScore || 20}
+                          {crit.score} / {crit.maxScore || 10}
                         </span>
                       </div>
 
-                      {/* Interactive 0-20 Range Slider + Stepper + Preset Benchmarks */}
+                      {/* Interactive 1-10 Range Slider + Stepper + Preset Benchmarks */}
                       <div className="space-y-2">
                         <div className="flex items-center gap-3">
                           <input
                             type="range"
-                            min="0"
-                            max={crit.maxScore || 20}
+                            min={crit.minScore || 1}
+                            max={crit.maxScore || 10}
                             step="1"
                             value={crit.score}
                             onChange={(e) => handleCriterionScoreChange(crit.key, e.target.value)}
@@ -552,13 +583,13 @@ export default function ReviewQueuePage() {
                           />
                           <input
                             type="number"
-                            min="0"
-                            max={crit.maxScore || 20}
+                            min={crit.minScore || 1}
+                            max={crit.maxScore || 10}
                             value={crit.score}
                             onChange={(e) =>
                               handleCriterionScoreChange(
                                 crit.key,
-                                Math.max(0, Math.min(crit.maxScore || 20, Number(e.target.value) || 0))
+                                Math.max(crit.minScore || 1, Math.min(crit.maxScore || 10, Number(e.target.value) || 1))
                               )
                             }
                             className="input w-16 py-1 px-2 text-center text-xs font-bold shrink-0"
@@ -568,11 +599,11 @@ export default function ReviewQueuePage() {
                         {/* Benchmark Presets */}
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
                           {[
-                            { label: "Fair (8)", val: 8 },
-                            { label: "Adequate (12)", val: 12 },
-                            { label: "Strong (16)", val: 16 },
-                            { label: "Exemplary (18)", val: 18 },
-                            { label: "Max (20)", val: 20 },
+                            { label: "Poor (2)", val: 2 },
+                            { label: "Fair (4)", val: 4 },
+                            { label: "Good (6)", val: 6 },
+                            { label: "Strong (8)", val: 8 },
+                            { label: "Exemplary (10)", val: 10 },
                           ].map((b) => (
                             <button
                               key={b.val}
@@ -687,11 +718,17 @@ export default function ReviewQueuePage() {
                       <div className="grid grid-cols-2 gap-2.5">
                         <button
                           type="button"
-                          disabled={finalizingDecision || activeProposal.status !== "under_review"}
+                          disabled={
+                            finalizingDecision ||
+                            activeProposal.status !== "under_review" ||
+                            (activeProposal.reviewSummary?.reviewCount || 0) < 1
+                          }
                           onClick={() => handleFinalizeDecision("accepted")}
                           title={
                             activeProposal.status !== "under_review"
-                              ? "Submit a review or move proposal to Under Review first"
+                              ? "Proposal must be Under Review first"
+                              : (activeProposal.reviewSummary?.reviewCount || 0) < 1
+                              ? "Submit at least one official review before accepting"
                               : "Mark proposal as Accepted"
                           }
                           className="inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition disabled:opacity-40"
@@ -700,11 +737,17 @@ export default function ReviewQueuePage() {
                         </button>
                         <button
                           type="button"
-                          disabled={finalizingDecision || activeProposal.status !== "under_review"}
+                          disabled={
+                            finalizingDecision ||
+                            activeProposal.status !== "under_review" ||
+                            (activeProposal.reviewSummary?.reviewCount || 0) < 1
+                          }
                           onClick={() => handleFinalizeDecision("rejected")}
                           title={
                             activeProposal.status !== "under_review"
-                              ? "Submit a review or move proposal to Under Review first"
+                              ? "Proposal must be Under Review first"
+                              : (activeProposal.reviewSummary?.reviewCount || 0) < 1
+                              ? "Submit at least one official review before rejecting"
                               : "Mark proposal as Rejected"
                           }
                           className="inline-flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition disabled:opacity-40"

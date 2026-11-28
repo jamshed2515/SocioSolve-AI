@@ -65,6 +65,9 @@ export default function MyProposals() {
       } else if (type === "withdraw") {
         await proposalService.withdrawProposal(proposal.id, withdrawReason);
         toast.success("Proposal withdrawn.");
+      } else if (type === "reopen") {
+        await proposalService.reopenProposal(proposal.id, "Reopened withdrawn proposal as draft for revision.");
+        toast.success("Proposal reopened as draft! You can now edit and resubmit.");
       }
       setConfirmAction(null);
       fetchMyProposals();
@@ -162,6 +165,7 @@ export default function MyProposals() {
           {proposals.map((prop) => {
             const isDraft = prop.status === "draft";
             const isSubmitted = prop.status === "submitted";
+            const isWithdrawn = prop.status === "withdrawn";
             const hasFeedback =
               prop.reviewSummary?.latestFeedback || prop.reviewSummary?.decisionReason;
 
@@ -245,6 +249,16 @@ export default function MyProposals() {
                         <RotateCcw size={14} /> Withdraw
                       </button>
                     )}
+
+                    {isWithdrawn && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction({ type: "reopen", proposal: prop })}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-300 hover:text-primary-200 bg-primary-500/15 border border-primary-500/30 px-3.5 py-2 rounded-xl transition"
+                      >
+                        <RotateCcw size={14} /> Reopen Draft
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -296,6 +310,8 @@ export default function MyProposals() {
                 `Once submitted, "${confirmAction.proposal.title}" will be locked from silent editing and queued for official reviewer evaluation.`}
               {confirmAction.type === "withdraw" &&
                 `Are you sure you want to withdraw "${confirmAction.proposal.title}" from the evaluation queue?`}
+              {confirmAction.type === "reopen" &&
+                `Reopen "${confirmAction.proposal.title}" back to Draft status so you can revise and resubmit it?`}
             </p>
 
             {confirmAction.type === "withdraw" && (

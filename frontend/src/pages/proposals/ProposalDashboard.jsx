@@ -57,7 +57,8 @@ export default function ProposalDashboard() {
   const [totalItems, setTotalItems] = useState(0);
   const limit = 8;
 
-  const isReviewerOrAdmin = ["admin", "university", "industry", "reviewer"].includes(user?.role);
+  const isReviewerOrAdmin = ["admin", "university", "industry"].includes(user?.role);
+  const canCreateProposal = ["student", "citizen", "university", "admin"].includes(user?.role);
 
   const loadDashboardOverview = useCallback(async () => {
     try {
@@ -205,9 +206,11 @@ export default function ProposalDashboard() {
               <ClipboardCheck size={16} /> Review Queue
             </Link>
           )}
-          <Link to="/proposals/new" className="btn-primary text-sm px-5 py-2.5">
-            <Plus size={16} /> Create Proposal
-          </Link>
+          {canCreateProposal && (
+            <Link to="/proposals/new" className="btn-primary text-sm px-5 py-2.5">
+              <Plus size={16} /> Create Proposal
+            </Link>
+          )}
         </div>
       </div>
 

@@ -1,4 +1,4 @@
-import api from "./api";
+import api, { BACKEND_ORIGIN } from "./api";
 
 export const proposalService = {
   // Dashboard KPIs & distribution
@@ -7,19 +7,25 @@ export const proposalService = {
     return data;
   },
 
-  // Rubric criteria configuration
+  // Live role-specific dashboard stats (Student, Citizen, University, Industry, Admin)
+  getRoleDashboard: async (role) => {
+    const { data } = await api.get(`/dashboard/${role}`);
+    return data;
+  },
+
+  // Rubric criteria configuration (backend-authoritative 1-10 scale, max 50)
   getRubricCriteria: async () => {
     const { data } = await api.get("/proposals/rubric-criteria");
     return data;
   },
 
-  // Published challenges from Module 2 / seed
+  // Published challenges from Module 2
   getPublishedChallenges: async () => {
     const { data } = await api.get("/proposals/challenges/published");
     return data;
   },
 
-  // User teams from Module 3 if available
+  // User teams from Module 3
   getMyTeams: async () => {
     const { data } = await api.get("/proposals/teams/my-teams");
     return data;
@@ -36,7 +42,18 @@ export const proposalService = {
     return data;
   },
 
-  // Upload supporting document
+  markAllNotificationsRead: async () => {
+    const { data } = await api.put("/proposals/notifications/read-all");
+    return data;
+  },
+
+  // Real-time WebSocket URL for Module 4 notifications
+  getNotificationsWebSocketUrl: (token) => {
+    const wsOrigin = BACKEND_ORIGIN.replace(/^http/i, "ws");
+    return `${wsOrigin}/api/proposals/ws/notifications?token=${encodeURIComponent(token)}`;
+  },
+
+  // Upload supporting document (returns protected document endpoint URL)
   uploadDocument: async (file, docType = "supporting_document") => {
     const formData = new FormData();
     formData.append("file", file);
@@ -45,6 +62,36 @@ export const proposalService = {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return data;
+  },
+
+  // Open either an external URL or an authenticated backend-protected document
+  openProtectedDocument: async (docUrl, fallbackName = "document") => {
+    if (!docUrl) return;
+    const isProtectedApiDoc = docUrl.includes("/api/proposals/documents/");
+    if (!isProtectedApiDoc) {
+      const target =
+        docUrl.startsWith("http://") || docUrl.startsWith("https://")
+          ? docUrl
+          : `${BACKEND_ORIGIN}${docUrl.startsWith("/") ? "" : "/"}${docUrl}`;
+      window.open(target, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // Extract API-relative path so Axios attaches Firebase Bearer token
+    const apiIdx = docUrl.indexOf("/api/");
+    const relPath = apiIdx >= 0 ? docUrl.slice(apiIdx + 4) : docUrl;
+    const res = await api.get(relPath, { responseType: "blob" });
+    const blobUrl = window.URL.createObjectURL(res.data);
+    const win = window.open(blobUrl, "_blank", "noopener,noreferrer");
+    if (!win) {
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = fallbackName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
   },
 
   // List proposals with search, filter, sort & pagination
@@ -98,6 +145,12 @@ export const proposalService = {
   // Withdraw submitted proposal
   withdrawProposal: async (proposalId, reason) => {
     const { data } = await api.post(`/proposals/${proposalId}/withdraw`, { reason });
+    return data;
+  },
+
+  // Reopen withdrawn proposal back to draft (M1 controlled workflow)
+  reopenProposal: async (proposalId, reason = "Reopened as draft for revision.") => {
+    const { data } = await api.post(`/proposals/${proposalId}/reopen`, { reason });
     return data;
   },
 

@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import proposalService from "../../services/proposalService";
+import { auth } from "../../config/firebase";
 
 const NAV_ITEMS = {
   citizen: [
@@ -91,7 +92,56 @@ export default function DashboardLayout({ children, title }) {
     };
   }, [location.pathname]);
 
+  // Real-time WebSocket stream for Module 4 proposal notifications
+  useEffect(() => {
+    const state = { ws: null, cancelled: false };
+
+    const connectWs = async () => {
+      try {
+        const fbUser = auth.currentUser;
+        if (!fbUser || state.cancelled) return;
+        const token = await fbUser.getIdToken();
+        if (!token || state.cancelled) return;
+        const wsUrl = proposalService.getNotificationsWebSocketUrl(token);
+        const socket = new WebSocket(wsUrl);
+        state.ws = socket;
+        socket.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload?.event === "notification" && payload.data) {
+              setNotifications((prev) => {
+                if (prev.some((n) => n.id === payload.data.id)) return prev;
+                return [payload.data, ...prev].slice(0, 30);
+              });
+            }
+          } catch {
+            // ignore non-JSON frames
+          }
+        };
+      } catch {
+        // WebSocket is progressive enhancement; HTTP polling still works
+      }
+    };
+
+    connectWs();
+    return () => {
+      state.cancelled = true;
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.close();
+      }
+    };
+  }, [user?.id]);
+
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const handleMarkAllRead = async () => {
+    try {
+      await proposalService.markAllNotificationsRead();
+      setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
+    } catch {
+      // ignore
+    }
+  };
 
   const handleNotificationClick = async (notif) => {
     try {
@@ -238,7 +288,18 @@ export default function DashboardLayout({ children, title }) {
               <div className="absolute right-0 top-12 w-80 glass bg-dark-800/95 border border-white/15 shadow-2xl p-3 z-50 space-y-2">
                 <div className="flex items-center justify-between px-2 py-1 border-b border-white/10">
                   <span className="text-xs font-bold text-white">Notifications</span>
-                  <span className="text-[11px] text-primary-400">{unreadCount} unread</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-primary-400">{unreadCount} unread</span>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllRead}
+                        className="text-[10px] text-white/60 hover:text-white underline"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {notifications.length === 0 ? (
                   <p className="text-xs text-white/40 text-center py-4">

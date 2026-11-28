@@ -459,20 +459,22 @@ def test_module4_end_to_end_api_and_security():
     from app.config import database as db_config
     from app.main import app
     from app.routes import dashboard_routes
-    from app.utils import firebase_token
+    from app.utils import firebase_token, cloudinary_storage
 
     fake_db = FakeDatabase()
     users = _make_users()
 
-    # Patch DB getter across modules
+    # Patch DB getter across modules and disable external cloud upload in unit tests
     orig_db = db_config.db
     orig_prop_get_db = proposal_service.get_database
     orig_dash_get_db = dashboard_routes.get_database
     orig_verify = firebase_token.verify_firebase_token
+    orig_is_cloud = cloudinary_storage.is_cloudinary_configured
 
     db_config.db = fake_db
     proposal_service.get_database = lambda: fake_db
     dashboard_routes.get_database = lambda: fake_db
+    cloudinary_storage.is_cloudinary_configured = lambda: False
 
     token_map = {
         f"tok_{k}": {"uid": u["firebase_uid"], "email": u["email"]}
@@ -962,6 +964,7 @@ def test_module4_end_to_end_api_and_security():
         proposal_service.get_database = orig_prop_get_db
         dashboard_routes.get_database = orig_dash_get_db
         firebase_token.verify_firebase_token = orig_verify
+        cloudinary_storage.is_cloudinary_configured = orig_is_cloud
         # Clean up any local uploaded test files created during test
         for doc in fake_db.proposal_documents.docs:
             sp = doc.get("storagePath")
