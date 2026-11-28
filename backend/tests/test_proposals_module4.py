@@ -45,6 +45,7 @@ if "firebase_admin" not in sys.modules:
         fake_auth.update_user = lambda uid, **kw: None
 
         fake_cred = types.ModuleType("firebase_admin.credentials")
+        fake_cred.Base = object
         fake_cred.Certificate = lambda p: p
         fake_cred.ApplicationDefault = lambda: None
 
@@ -53,6 +54,47 @@ if "firebase_admin" not in sys.modules:
         sys.modules["firebase_admin"] = fake_fb
         sys.modules["firebase_admin.auth"] = fake_auth
         sys.modules["firebase_admin.credentials"] = fake_cred
+
+if "google.auth.credentials" not in sys.modules:
+    try:
+        from google.auth.credentials import AnonymousCredentials  # noqa: F401
+    except ImportError:
+        fake_google = types.ModuleType("google")
+        fake_gauth = types.ModuleType("google.auth")
+        fake_gcred = types.ModuleType("google.auth.credentials")
+        fake_gcred.AnonymousCredentials = type("AnonymousCredentials", (), {})
+        fake_google.auth = fake_gauth
+        fake_gauth.credentials = fake_gcred
+        sys.modules.setdefault("google", fake_google)
+        sys.modules["google.auth"] = fake_gauth
+        sys.modules["google.auth.credentials"] = fake_gcred
+
+if "socketio" not in sys.modules:
+    try:
+        import socketio  # noqa: F401
+    except ImportError:
+        fake_sio = types.ModuleType("socketio")
+
+        class _DummyAsyncServer:
+            def __init__(self, *a, **k):
+                pass
+            def event(self, fn):
+                return fn
+            def on(self, *a, **k):
+                return lambda fn: fn
+            async def emit(self, *a, **k):
+                pass
+            async def enter_room(self, *a, **k):
+                pass
+            async def leave_room(self, *a, **k):
+                pass
+
+        async def _dummy_asgi_app(scope, receive, send):
+            pass
+
+        fake_sio.AsyncServer = _DummyAsyncServer
+        fake_sio.ASGIApp = lambda *a, **k: _dummy_asgi_app
+        sys.modules["socketio"] = fake_sio
 
 from app.models.proposal import (  # noqa: E402
     ProposalStatus,

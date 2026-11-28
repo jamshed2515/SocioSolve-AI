@@ -2,6 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider } from "./context/AuthContext";
 
+// Public marketing pages
+import Landing from "./pages/public/Landing";
+import About   from "./pages/public/About";
+import Contact from "./pages/public/Contact";
+
 // Auth pages
 import Login          from "./pages/auth/Login";
 import Register       from "./pages/auth/Register";
@@ -18,6 +23,12 @@ import AdminDashboard      from "./pages/dashboards/AdminDashboard";
 // Profile
 import MyProfile   from "./pages/profile/MyProfile";
 import EditProfile from "./pages/profile/EditProfile";
+
+// Module 2 – Societal Challenge Management
+import ChallengeExplorePage from "./pages/challenges/ChallengeExplorePage";
+import ChallengeDetailsPage from "./pages/challenges/ChallengeDetailsPage";
+import ChallengeFormPage    from "./pages/challenges/ChallengeFormPage";
+import MyChallengesPage     from "./pages/challenges/MyChallengesPage";
 
 // Module 4 – Solution Proposals & Evaluation
 import ProposalDashboard   from "./pages/proposals/ProposalDashboard";
@@ -43,10 +54,12 @@ import MyTeams                 from "./modules/team-collaboration/pages/MyTeams"
 import CreateTeam              from "./modules/team-collaboration/pages/CreateTeam";
 import TeamDetails             from "./modules/team-collaboration/pages/TeamDetails";
 import ExploreTeams            from "./modules/team-collaboration/pages/ExploreTeams";
+import MyJoinRequests          from "./modules/team-collaboration/pages/MyJoinRequests";
 import TeamInvitations         from "./modules/team-collaboration/pages/TeamInvitations";
 import TeamDiscussion          from "./modules/team-collaboration/pages/TeamDiscussion";
 import TeamTasks               from "./modules/team-collaboration/pages/TeamTasks";
 import TeamMeetings            from "./modules/team-collaboration/pages/TeamMeetings";
+import NotificationsPage       from "./modules/team-collaboration/pages/NotificationsPage";
 
 export default function App() {
   return (
@@ -69,7 +82,9 @@ export default function App() {
 
         <Routes>
           {/* ── Public routes ──────────────────────────────── */}
-          <Route path="/"                 element={<Navigate to="/login" replace />} />
+          <Route path="/"                 element={<Landing />} />
+          <Route path="/about"            element={<About />} />
+          <Route path="/contact"          element={<Contact />} />
           <Route path="/login"            element={<Login />} />
           <Route path="/register"         element={<Register />} />
           <Route path="/forgot-password"  element={<ForgotPassword />} />
@@ -89,6 +104,22 @@ export default function App() {
           } />
           <Route path="/profile/edit" element={
             <ProtectedRoute><EditProfile /></ProtectedRoute>
+          } />
+
+          {/* ── Module 2: Societal Challenge Management ───── */}
+          <Route path="/challenges" element={<ChallengeExplorePage />} />
+          <Route path="/challenges/new" element={
+            <ProtectedRoute><ChallengeFormPage /></ProtectedRoute>
+          } />
+          <Route path="/challenges/my" element={
+            <ProtectedRoute><MyChallengesPage /></ProtectedRoute>
+          } />
+          <Route path="/my-challenges" element={
+            <ProtectedRoute><MyChallengesPage /></ProtectedRoute>
+          } />
+          <Route path="/challenges/:id" element={<ChallengeDetailsPage />} />
+          <Route path="/challenges/:id/edit" element={
+            <ProtectedRoute><ChallengeFormPage /></ProtectedRoute>
           } />
 
           {/* ── Module 4: Solution Proposals & Evaluation ─── */}
@@ -153,18 +184,22 @@ export default function App() {
           {/* ── Module 3: Team Formation & Collaboration ───── */}
           <Route path="/teams" element={<TeamCollaborationLayout />}>
             <Route index element={<TeamDashboard />} />
-            <Route path="my-teams"    element={<MyTeams />} />
-            <Route path="create"      element={<CreateTeam />} />
-            <Route path="explore"     element={<ExploreTeams />} />
-            <Route path="invitations" element={<TeamInvitations />} />
-            <Route path="discussions" element={<TeamDiscussion />} />
-            <Route path="tasks"       element={<TeamTasks />} />
-            <Route path="meetings"    element={<TeamMeetings />} />
-            <Route path=":id"         element={<TeamDetails />} />
+            <Route path="my-teams"      element={<MyTeams />} />
+            <Route path="create"        element={<CreateTeam />} />
+            <Route path="explore"       element={<ExploreTeams />} />
+            <Route path="requests"      element={<MyJoinRequests />} />
+            <Route path="invitations"   element={<TeamInvitations />} />
+            <Route path="discussions"   element={<TeamDiscussion />} />
+            <Route path="tasks"         element={<TeamTasks />} />
+            <Route path="meetings"      element={<TeamMeetings />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path=":id"           element={<TeamDetails />} />
           </Route>
 
+          <Route path="/notifications" element={<Navigate to="/teams/notifications" replace />} />
+
           {/* ── 404 fallback ───────────────────────────────── */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

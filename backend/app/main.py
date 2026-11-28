@@ -14,8 +14,17 @@ from app.config.database import connect_to_mongo, close_mongo_connection
 from app.config.firebase import init_firebase
 from app.routes.auth_routes import router as auth_router
 from app.routes.user_routes import router as user_router
+from app.routes.challenge_routes import router as challenge_router
 from app.routes.proposal_routes import router as proposal_router
 from app.modules.team_collaboration.router import router as team_collaboration_router
+from app.modules.team_collaboration.routers.join_request_router import router as join_request_router
+from app.modules.team_collaboration.routers.invitation_router import router as invitation_router
+from app.modules.team_collaboration.routers.discussion_router import router as discussion_router, comments_router
+from app.modules.team_collaboration.routers.task_router import router as task_router
+from app.modules.team_collaboration.routers.meeting_router import router as meeting_router
+from app.modules.team_collaboration.routers.milestone_router import router as milestone_router
+from app.modules.team_collaboration.routers.notification_router import router as notification_router
+from app.modules.team_collaboration.socket import sio, sio_app
 from app.routes.admin_routes import router as admin_router
 from app.routes.dashboard_routes import router as dashboard_router
 
@@ -35,6 +44,7 @@ async def lifespan(app: FastAPI):
     # Ensure upload directories exist
     os.makedirs("uploads/avatars", exist_ok=True)
     os.makedirs("uploads/proposals", exist_ok=True)
+    os.makedirs("uploads/challenges", exist_ok=True)
 
     yield
     await close_mongo_connection()
@@ -42,29 +52,36 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="SocioSolve-AI API",
-    description="Authentication & User Management – Module 1 | Team Formation & Collaboration – Module 3 | Solution Proposals & Evaluation – Module 4",
+    description="Authentication & User Management – Module 1 | Societal Challenges – Module 2 | Team Formation & Collaboration – Module 3 | Solution Proposals & Evaluation – Module 4",
     version="2.0.0",
     lifespan=lifespan,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Bearer tokens only (no auth cookies) -> credentials not needed
+# Bearer tokens & cross-origin frontend requests (includes PATCH for Module 4 status updates)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_origins=settings.allowed_origins_list or ["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# ── Static files (public avatars only; proposal documents are served via authenticated API) ──
+# ── Static files (public avatars & challenges only; Module 4 proposal docs require auth API) ──
 os.makedirs("uploads/avatars", exist_ok=True)
 os.makedirs("uploads/proposals", exist_ok=True)
+os.makedirs("uploads/challenges", exist_ok=True)
 app.mount("/uploads/avatars", StaticFiles(directory="uploads/avatars"), name="avatars")
+app.mount("/uploads/challenges", StaticFiles(directory="uploads/challenges"), name="challenges")
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/api/users", tags=["Users"])
+app.include_router(
+    challenge_router,
+    prefix="/api/challenges",
+    tags=["Module 2 – Societal Challenges"],
+)
 app.include_router(
     team_collaboration_router,
     prefix="/api/teams",
@@ -76,12 +93,55 @@ app.include_router(
     tags=["Module 3 – Team Collaboration"],
 )
 app.include_router(
+    join_request_router,
+    prefix="/api/join-requests",
+    tags=["Module 3 – Join Requests"],
+)
+app.include_router(
+    invitation_router,
+    prefix="/api/invitations",
+    tags=["Module 3 – Invitations"],
+)
+app.include_router(
+    discussion_router,
+    prefix="/api/discussions",
+    tags=["Module 3 – Discussions"],
+)
+app.include_router(
+    comments_router,
+    prefix="/api/comments",
+    tags=["Module 3 – Comments"],
+)
+app.include_router(
+    task_router,
+    prefix="/api/tasks",
+    tags=["Module 3 – Tasks"],
+)
+app.include_router(
+    meeting_router,
+    prefix="/api/meetings",
+    tags=["Module 3 – Meetings"],
+)
+app.include_router(
+    milestone_router,
+    prefix="/api/milestones",
+    tags=["Module 3 – Milestones"],
+)
+app.include_router(
+    notification_router,
+    prefix="/api/notifications",
+    tags=["Module 3 – Notifications"],
+)
+app.include_router(
     proposal_router,
     prefix="/api/proposals",
     tags=["Module 4 - Proposals & Evaluation"],
 )
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["Dashboards"])
 app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
+
+# ── Mount Socket.IO real-time server at /socket.io ─────────────────────────
+app.mount("/socket.io", sio_app)
 
 
 @app.get("/", tags=["Health"])

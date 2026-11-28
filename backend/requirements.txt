@@ -12,6 +12,7 @@ bcrypt==4.2.1
 python-multipart==0.0.12
 python-dotenv==1.0.1
 slowapi==0.1.9
+python-socketio==5.11.4
 
 # --- testing ---
 pytest==8.3.4

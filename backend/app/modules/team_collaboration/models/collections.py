@@ -9,13 +9,15 @@ from enum import Enum
 
 
 class TeamCollaborationCollections(str, Enum):
-    """Planned MongoDB collection names for Module 3 (implemented in Phase 2+)."""
+    """Planned MongoDB collection names for Module 3."""
 
     TEAMS = "teams"
     TEAM_INVITATIONS = "team_invitations"
-    TEAM_JOIN_REQUESTS = "team_join_requests"
+    TEAM_JOIN_REQUESTS = "join_requests"
     TEAM_DISCUSSIONS = "team_discussions"
+    DISCUSSION_COMMENTS = "discussion_comments"
     TEAM_TASKS = "team_tasks"
     TEAM_MEETINGS = "team_meetings"
     TEAM_MILESTONES = "team_milestones"
+    NOTIFICATIONS = "notifications"
 

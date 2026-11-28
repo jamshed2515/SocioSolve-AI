@@ -93,4 +93,49 @@
   .glow {
     box-shadow: 0 0 40px rgba(108, 99, 255, 0.3);
   }
+
+  /* Faint grid backdrop for hero sections, faded out toward the edges */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 40%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 40%, transparent 100%);
+  }
+
+  /* Card whose border lights up with the brand gradient on hover */
+  .card-hover {
+    @apply relative transition-all duration-300 hover:-translate-y-1 hover:border-primary-500/40
+           hover:shadow-xl hover:shadow-primary-500/10;
+  }
 }
+
+/* ── Public pages: scroll reveal & floating preview cards ─────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+.float-slow { animation: float-y 6s ease-in-out infinite; }
+.float-slower { animation: float-y 8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .float-slow, .float-slower { animation: none; }
+}
+
+/* FAQ disclosure arrow */
+details.faq summary { list-style: none; }
+details.faq summary::-webkit-details-marker { display: none; }
+details.faq[open] .faq-icon { transform: rotate(45deg); }

@@ -112,7 +112,10 @@ export default function Register() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-500/20 border border-primary-500/30 mb-3 glow">
             <Zap className="w-7 h-7 text-primary-400" />
           </div>
-          <h1 className="text-2xl font-bold text-gradient">SocioSolve-AI</h1>
+          <h1 className="text-2xl font-bold text-gradient">
+            <Link to="/">SocioSolve-AI</Link>
+          </h1>
+          <Link to="/" className="inline-block mt-1 text-xs text-white/40 hover:text-white/70">← Back to home</Link>
         </div>
 
         {/* Step indicator */}

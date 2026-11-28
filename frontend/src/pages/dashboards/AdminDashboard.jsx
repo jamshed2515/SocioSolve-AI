@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import authService, { firebaseErrorMessage } from "../../services/authService";
+import challengeService from "../../services/challengeService";
 import toast from "react-hot-toast";
 import {
-  Shield, Users, AlertTriangle, CheckCircle2, Ban,
-  Check, X, RefreshCw, Building2,
+  Shield, Users, AlertTriangle, CheckCircle2,
+  Check, X, RefreshCw, Building2, FileText, ArrowRight,
 } from "lucide-react";
 
 const ROLE_DISTRIBUTION = [
@@ -20,6 +22,9 @@ export default function AdminDashboard() {
   const [pendingError, setPendingError] = useState("");
   const [actionId, setActionId] = useState(null);
 
+  const [pendingChallenges, setPendingChallenges] = useState([]);
+  const [loadingChallenges, setLoadingChallenges] = useState(true);
+
   const fetchPending = useCallback(async () => {
     setLoadingPending(true);
     setPendingError("");
@@ -32,6 +37,27 @@ export default function AdminDashboard() {
       setLoadingPending(false);
     }
   }, []);
+
+  const fetchPendingChallenges = useCallback(async () => {
+    setLoadingChallenges(true);
+    try {
+      const res = await challengeService.getChallenges({ status: "submitted", limit: 20 });
+      setPendingChallenges(res.challenges || []);
+    } catch (err) {
+      console.error("Failed to fetch pending challenges:", err);
+    } finally {
+      setLoadingChallenges(false);
+    }
+  }, []);
+
+  const handleRefreshAll = () => {
+    fetchPending();
+    fetchPendingChallenges();
+  };
+
+  useEffect(() => {
+    fetchPendingChallenges();
+  }, [fetchPendingChallenges]);
 
   useEffect(() => {
     const cancelled = { current: false };
@@ -73,9 +99,9 @@ export default function AdminDashboard() {
 
   const stats = [
     { label: "Total Users",       value: "1,284",                   icon: Users,         color: "text-primary-400", bg: "bg-primary-500/10" },
-    { label: "Pending Approvals", value: String(pendingUsers.length), icon: AlertTriangle, color: "text-amber-400",   bg: "bg-amber-500/10" },
+    { label: "Pending Orgs",      value: String(pendingUsers.length), icon: AlertTriangle, color: "text-amber-400",   bg: "bg-amber-500/10" },
+    { label: "Submitted Challenges", value: String(pendingChallenges.length), icon: FileText, color: "text-blue-400", bg: "bg-blue-500/10" },
     { label: "Verified Accounts", value: "1,061",                   icon: CheckCircle2,  color: "text-green-400",   bg: "bg-green-500/10" },
-    { label: "Suspended",         value: "8",                       icon: Ban,           color: "text-red-400",     bg: "bg-red-500/10" },
   ];
 
   return (
@@ -93,11 +119,11 @@ export default function AdminDashboard() {
           <button
             id="admin-refresh-btn"
             type="button"
-            onClick={fetchPending}
-            disabled={loadingPending}
+            onClick={handleRefreshAll}
+            disabled={loadingPending || loadingChallenges}
             className="ml-auto btn-primary text-sm"
           >
-            <RefreshCw size={16} className={loadingPending ? "animate-spin" : ""} /> Refresh
+            <RefreshCw size={16} className={loadingPending || loadingChallenges ? "animate-spin" : ""} /> Refresh
           </button>
         </div>
       </div>
@@ -216,6 +242,77 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Submitted Community Challenges Awaiting Review */}
+      <div className="glass p-6 mt-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-base font-semibold text-white">Submitted Challenges Awaiting Review</h3>
+            <p className="text-xs text-white/40 mt-0.5">Citizen submissions awaiting administrative moderation & publishing</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="badge bg-blue-500/20 text-blue-300">
+              {pendingChallenges.length} submitted
+            </span>
+            <Link
+              to="/challenges?status=submitted"
+              className="text-xs text-primary-400 hover:text-primary-300 font-medium inline-flex items-center gap-1"
+            >
+              <span>View All</span>
+              <ArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+
+        {loadingChallenges ? (
+          <div className="flex items-center justify-center py-10">
+            <div className="w-7 h-7 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : pendingChallenges.length === 0 ? (
+          <div className="text-center py-10 text-white/40 text-sm">
+            <CheckCircle2 className="mx-auto mb-2 text-emerald-400/70" size={28} />
+            No submitted challenges awaiting review right now.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pendingChallenges.map((ch) => (
+              <div
+                key={ch.id}
+                className="p-4 rounded-xl bg-white/5 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-white/20 transition"
+              >
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-semibold text-primary-300 bg-primary-500/10 px-2.5 py-0.5 rounded-full border border-primary-500/20">
+                      {ch.category}
+                    </span>
+                    <span className="badge bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      Submitted
+                    </span>
+                    {ch.challengeCode && (
+                      <span className="font-mono text-white/40 text-[11px]">{ch.challengeCode}</span>
+                    )}
+                  </div>
+                  <h4 className="text-sm font-semibold text-white">{ch.title}</h4>
+                  <p className="text-xs text-white/50 line-clamp-1">{ch.description}</p>
+                  <p className="text-[11px] text-white/40">
+                    Reported by <strong className="text-white/70">{ch.authorName || "Citizen"}</strong> • {ch.location} • Created {new Date(ch.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+                  <Link
+                    to={`/challenges/${ch.id}`}
+                    className="btn-primary text-xs py-2 px-3.5 inline-flex items-center gap-1.5 font-semibold"
+                  >
+                    <span>Review & Publish</span>
+                    <ArrowRight size={14} />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

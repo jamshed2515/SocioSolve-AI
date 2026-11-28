@@ -10,6 +10,8 @@ belonging to disabled Firebase accounts.
 from fastapi import HTTPException, status
 from firebase_admin import auth as fb_auth
 
+from app.config.firebase import has_admin_credentials
+
 CLOCK_SKEW_SECONDS = 5
 
 
@@ -26,8 +28,12 @@ def verify_firebase_token(id_token: str) -> dict:
     if not id_token:
         raise _unauthorized("Missing authentication token.")
     try:
+        # The revocation check calls Firebase's admin API, so it needs the service-account
+        # key. In local limited mode (no key) the signature/claims checks still run.
         return fb_auth.verify_id_token(
-            id_token, check_revoked=True, clock_skew_seconds=CLOCK_SKEW_SECONDS
+            id_token,
+            check_revoked=has_admin_credentials(),
+            clock_skew_seconds=CLOCK_SKEW_SECONDS,
         )
     # Subclasses of InvalidIdTokenError must be caught first
     except fb_auth.ExpiredIdTokenError:

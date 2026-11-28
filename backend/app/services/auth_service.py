@@ -10,6 +10,7 @@ from firebase_admin import auth as fb_auth
 from pymongo.errors import DuplicateKeyError
 
 from app.config.database import get_database
+from app.config.firebase import has_admin_credentials
 from app.config.settings import settings
 from app.models.user import (
     UserRole,
@@ -122,7 +123,10 @@ async def sync_user(claims: dict, payload: SyncUserRequest) -> SyncUserResponse:
 
 async def logout(uid: str) -> dict:
     """Revoke the user's Firebase refresh tokens (signs out all sessions)."""
-    await run_in_threadpool(fb_auth.revoke_refresh_tokens, uid)
+    if has_admin_credentials():
+        await run_in_threadpool(fb_auth.revoke_refresh_tokens, uid)
+    else:
+        logger.warning("Limited Firebase mode: skipped session revocation for %s on logout.", uid)
     return {"message": "Logged out successfully."}
 
 
@@ -141,6 +145,11 @@ async def change_password(claims: dict, new_password: str, confirm_password: str
     if datetime.now(timezone.utc).timestamp() - auth_time > settings.RECENT_LOGIN_MAX_AGE:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Recent sign-in required. Re-enter your current password.")
 
+    if not has_admin_credentials():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Password change isn't available on this local server (Firebase admin key not configured).",
+        )
     await run_in_threadpool(fb_auth.update_user, claims["uid"], password=new_password)
     await run_in_threadpool(fb_auth.revoke_refresh_tokens, claims["uid"])
     return {"message": "Password changed successfully. Please log in again."}

@@ -97,6 +97,8 @@ class TeamResponse(BaseModel):
     status: str
     is_leader: Optional[bool] = False
     is_member: Optional[bool] = False
+    user_request_status: Optional[str] = None
+    user_request_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
